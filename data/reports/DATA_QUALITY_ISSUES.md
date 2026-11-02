@@ -1,0 +1,310 @@
+# CityLinc AI Calling Agent — Data Quality Issues Catalog
+
+**Document ID:** `DATA_QUALITY_ISSUES.md`  
+**Phase:** P0.2 — Final Database Design Specification (Post-Review Revision 3)  
+**Status:** PROPOSED SPECIFICATION — READ-ONLY AUDIT  
+**Classification:** Transit Data Architecture Quality Audit  
+**Execution Gate:** STRICT READ-ONLY — PHASE 2 STRICTLY LOCKED
+
+---
+
+## Verifiable Database Safety Statement
+
+> **Database Safety Notice:**  
+> This audit executed zero SQL statements, established zero database connections, and created no database objects. The existing PostgreSQL database state was not inspected because database connections are prohibited under strict read-only execution. All schemas and DDL proposals in this document are purely theoretical specifications awaiting authorized Phase 2 execution.
+
+---
+
+## 1. Overview & Issue Taxonomy
+
+This catalog documents all structural anomalies, schema divergences, corrupted sequences, and semantic ambiguities discovered during the read-only audit of the CityLinc Nashik source assets.
+
+Each issue is assigned a unique identifier, severity level, affected scope, and specific risk analysis detailing how the issue would negatively impact the **AI Voice Calling Agent** if not addressed by architectural guardrails.
+
+### Severity Classification:
+- **CRITICAL:** High risk of AI agent hallucination, false passenger guidance, database ingestion failure, or silent constraint violation.
+- **HIGH:** Risk of missing routes, broken foreign keys, inaccurate schedule calculations, or revenue miscalculation.
+- **MEDIUM:** Semantic ambiguity or data redundancy requiring normalization and operator clarification.
+- **LOW:** Minor formatting inconsistency or informational metadata deficiency.
+
+---
+
+## 2. Catalog of Identified Issues
+
+### DQI-001: Duplicate Header Column Names in Timetable CSV
+- **Severity:** HIGH
+- **Source File:** `data/raw/timetables/all_route_timetables.csv`
+- **Affected Elements:** Header row columns at indices `(0, 18)`: `routeid`; `(1, 17)`: `routeno`; `(3, 16)`: `routename`.
+- **Description:** Standard CSV readers and SQL `COPY` loaders fail or produce indeterminate column mapping when duplicate column headers exist in the same input stream.
+- **Impact on AI Agent:** Ingestion pipelines may map columns incorrectly, resulting in corrupted route IDs or route numbers in timetable queries.
+- **Mitigation:** Ingestion must use strict 0-based positional indexing rather than column-name-based mapping, asserting equality between duplicate columns before discarding indices 16, 17, and 18.
+- **Confirmation Required:** No (programmatic handling).
+
+---
+
+### DQI-002: Semantic Divergence Between `routeno` and `rno` Across Datasets
+- **Severity:** CRITICAL
+- **Source Files:** `data/raw/routes/all_route_details_Nashik.json`, `data/raw/timetables/all_route_timetables.csv`
+- **Affected Elements:** Fields `routeno` and `rno`.
+- **Description:** In the route registry (`all_route_details_Nashik.json`), `routeno` is an integer category code (`3`, `4`, `6`), while `rno` contains the public passenger-facing line identifier (e.g., `"101"`, `"129I"`, `"245"`). Conversely, in `all_route_timetables.csv`, `routeno` contains the public route code (e.g., `"101"`), while `rno` contains identical or legacy identifiers.
+- **Impact on AI Agent:** If the AI agent queries routes by `routeno` using route registry semantics, it will query category codes instead of passenger line numbers, causing widespread hallucination or route lookup failures.
+- **Mitigation:** Disambiguate attributes in the database schema: preserve `source_rno` as the primary passenger-facing route code, retain `source_routeno` as the categorical attribute, and expose an immutable generated alias `route_code`.
+- **Confirmation Required:** No (schema disambiguation resolves conflict).
+
+---
+
+### DQI-003: Coordinate Decimal Variations Reflect Uniform Offset Pattern Rather Than Verified Physical Ground Coordinates
+- **Severity:** HIGH
+- **Source File:** `data/raw/routes/route_stations_Nashik.csv`
+- **Affected Elements:** Coordinates `center_lat`, `center_lon`, `stationlat1`, `stationlong1`, `stationlat2`, `stationlong2`.
+- **Attribution Statement:** An empirical numerical offset pattern is observed across route stops where bounding coordinate fields exhibit uniform arithmetic offsets relative to center coordinates. This pattern is tracked during ingestion via the audit flag `matches_observed_offset_pattern`. Ingestion preserves raw numeric values verbatim without claiming physical GPS provenance or asserting a confirmed synthetic origin. Physical coordinate validity and platform provenance remain provisional pending operator verification.
+- **Impact on AI Agent:** If the voice agent attempts to compute high-accuracy walking directions, physical stop arrivals, or real-time geolocation from these values, it will provide inaccurate navigation guidance to callers.
+- **Mitigation:** Store coordinates in `public.route_stop_coordinates_audit` keyed to surrogate `route_stop_id` referencing `route_stops`, preserving natural key `source_routepartid`, physical CSV `source_row_number`, and the Boolean flag `matches_observed_offset_pattern`. Spatial PostGIS extensions are deferred to future scope under separate approval.
+- **Confirmation Required:** Operator GPS ground survey required before using coordinates for navigational guidance.
+
+---
+
+### DQI-004: Consecutive Back-to-Back Duplicate Stations in Route Sequences
+- **Severity:** HIGH
+- **Source File:** `data/raw/routes/route_stations_Nashik.csv`
+- **Affected Elements:** Stop sequences in Routes `6710`, `6908`, and `6866`.
+- **Description:** Empirical audit verifies exactly 63 consecutive duplicate stop pairs (126 records) across three routes:
+  - Route `6710`: 1 pair (2 records, sequences 36 & 37, station 1049 Bharat Nagar 1)
+  - Route `6908`: 36 pairs (72 records)
+  - Route `6866`: 26 pairs (52 records)
+  - Total repeated station IDs across routes: 66.
+- **Preservation Policy:** In accordance with strict non-destructive preservation, **zero stops are deleted or silently dropped**. All 12,909 stop records are preserved in `route_stops` and standard views. Flagged rows are identified via `is_consecutive_duplicate = TRUE`. Uniqueness is enforced via surrogate primary key `route_stop_id` and unique constraint `(route_id, direction_id, stop_sequence)`. Natural key `source_routepartid` and physical CSV `source_row_number` are retained.
+- **Impact on AI Agent:** If consecutive duplicates are not identified, transit routing logic may report zero-minute loops or phantom transfers at the same stop.
+- **Mitigation:** Flag all 126 records in `route_stops.is_consecutive_duplicate`. Provide default views preserving all records, with optional operator views filtering duplicates.
+- **Confirmation Required:** Operator confirmation on operational purpose of duplicate stop sequences.
+
+---
+
+### DQI-005: Unconfirmed Semantics of Dispatch Stop Names and Station Fare (`stationfare = 0`)
+- **Severity:** CRITICAL
+- **Source File:** `data/raw/timetables/all_route_timetables.csv`
+- **Affected Elements:** Columns `stationfare`, `stopname`, `starttrip`, `endtrip`.
+- **Mandatory Interpretation Statement:** All 3,547 timetable records contain matching StopName and StartTrip values, with stationfare = 0. The operational and fare meaning of these fields remains unconfirmed and requires operator clarification.
+- **Impact on AI Agent:** If the AI voice agent interprets `stationfare = 0` as a free service, it will inform callers that municipal bus services are free of charge, causing severe operational disruption and revenue loss.
+- **Mitigation:** Ingest `stationfare` into `trips.raw_stationfare VARCHAR(16) NOT NULL DEFAULT '0'`. Set `trips.fare_amount` to `NULL` with `fare_verification_status = 'UNVERIFIED'`. Hardened CHECK constraint `chk_fare_verification` prevents treating unverified fares as zero or free.
+- **Confirmation Required:** YES (Operator clarification required before enabling fare quotes from dispatch timetables).
+
+---
+
+### DQI-006: Routes in Master Registry Lacking Scheduled Trips
+- **Severity:** MEDIUM
+- **Source Files:** `data/raw/routes/all_routes_on_map.json`, `data/raw/routes/all_route_details_Nashik.json`, `data/raw/timetables/all_route_timetables.csv`
+- **Affected Elements:** Route IDs in registry vs. timetable trips.
+- **Description:** Out of 315 unique routes defined in the master registry, only 187 routes appear in `all_route_timetables.csv`. Exactly 128 routes have zero scheduled trips in the dispatch timetable.
+- **Impact on AI Agent:** Callers inquiring about any of the 128 unscheduled routes will receive confusing or conflicting responses if the agent assumes all registered routes are actively running.
+- **Mitigation:** Maintain `routes.is_active` flag. Routes lacking active timetable entries are marked inactive or unscheduled until operational schedules are provided.
+- **Confirmation Required:** Operator confirmation on whether unscheduled routes represent seasonal, planned, or defunct services.
+
+---
+
+### DQI-007: Operational Trip Status Code Distribution
+- **Severity:** HIGH
+- **Source File:** `data/raw/timetables/all_route_timetables.csv`
+- **Affected Elements:** Column `trip_status`.
+- **Description:** The status column is named `trip_status` (not `status`). Empirical audit reveals four discrete integer values across all 3,547 records:
+  - Code `0`: 2,085 records (58.78%)
+  - Code `2`: 1,237 records (34.87%)
+  - Code `6`: 218 records (6.15%)
+  - Code `9`: 7 records (0.20%)
+  - Total: 3,547 records (100.00%)
+- **Semantic Status:** The operational meanings of these codes (e.g., Scheduled, Cancelled, Completed, Delayed) remain unconfirmed by operator documentation.
+- **Impact on AI Agent:** Hardcoding speculative meanings could lead the agent to announce cancelled buses as active or active buses as cancelled.
+- **Mitigation:** Ingest raw values into `trips.trip_status_code INT NOT NULL`. Reference lookup table `trip_status_lookup` containing neutral unconfirmed labels (`Unknown/Unconfirmed`) pending operator mapping.
+- **Confirmation Required:** YES (Operator confirmation required for definitive status code definitions).
+
+---
+
+### DQI-008: Overnight Trips Crossing Midnight (Inverted Time Deltas)
+- **Severity:** MEDIUM
+- **Source File:** `data/raw/timetables/all_route_timetables.csv`
+- **Affected Elements:** Columns `eta` and `arrivalatdestination`.
+- **Description:** Several scheduled trips depart late in the evening and arrive after midnight, resulting in an arrival time value that is numerically earlier than the departure time (`arrivalatdestination < eta`).
+- **Impact on AI Agent:** Naive subtraction yields negative trip durations (e.g., -1,380 minutes), causing the voice agent to report nonsense durations or fail mathematical validation.
+- **Mitigation:** Store raw strings in `raw_eta_text` and `raw_arrival_text VARCHAR(16) NOT NULL`. Provide provisional derived fields `provisional_is_next_day_arrival BOOLEAN NOT NULL DEFAULT FALSE` and `provisional_duration_mins INTEGER NULL` calculating modular duration ($(\Delta + 24	ext{ hours}) \pmod{24}$).
+- **Confirmation Required:** No (standard transit temporal arithmetic).
+
+---
+
+### DQI-009: Pass Concession Schemes, Ambiguities, and Baseline Price Reconciliation
+- **Severity:** HIGH
+- **Source Files:** `data/raw/fare/bus_passes.json`, `data/raw/fare/New Fare Passes.pdf`
+- **Affected Elements:** Pass scheme structures, pricing, and discount percentages.
+- **Empirical Findings:**
+  1. **90-Day Open-Ended Pass (FND-024):** The price is verified as ₹5,250 in both `bus_passes.json` (`price = 5250`) and `New Fare Passes.pdf` (3 Month revised price ₹5,250). Claims of ₹2,100 were proven erroneous and are fully rejected.
+  2. **Companion Concession (FND-028):** Blind and 100% handicapped pass holders are entitled to a 50% concession for one accompanying attendant/companion.
+  3. **Student Concession Divergence:** Standard student discount is 50%. For extended student passes, `New Fare Passes.pdf` specifies 66.66% concession, whereas `bus_passes.json` calculates ₹2,100 based on a 66.60% concession.
+  4. **Fixed-Route Pass Formula:** 1-month fixed-route pass is priced at 20 days single-fare equivalent; 3-month fixed-route pass is priced at 50 days single-fare equivalent.
+  5. **Residence Requirements:** Municipal corporation limits vs outer suburban limits dictate pass eligibility and require official address documentation.
+- **Impact on AI Agent:** Misquoting pass prices or concession rules could result in passenger disputes at transit ticketing counters.
+- **Mitigation:** Model pass types, discount rules, companion policies, and validity formulas in `fare_concession_policies` and `route_pass_rates`. Store exact percentage variations and PDF citations.
+- **Confirmation Required:** Operator confirmation on whether student concession is strictly 66.66% or 66.60%.
+
+---
+
+### DQI-010: Aggregate Timetable Inconsistencies & String Redundancies
+- **Severity:** MEDIUM
+- **Source File:** `data/raw/timetables/citylinc_timetables.json`
+- **Affected Elements:** String attributes `source_departures` and `destination_departures`.
+- **Description:** In `citylinc_timetables.json`, departure schedules are formatted as **string attributes** (comma-separated departure times), **NOT nested arrays**. Duplicate timestamps exist within the same route block across directions and service frequencies.
+- **Impact on AI Agent:** Inability to perform structured SQL queries for next-bus departure inquiries without robust string extraction, attribute identification, and deterministic indexing.
+- **Mitigation:** Ingestion preserves `source_departures` and `destination_departures` as string attributes while parsing discrete departure times into `route_departures`. Ingestion tracks three independent dimensions: (1) route array index (`source_route_array_index`), (2) departure/destination attribute (`departure_attribute`), and (3) token index within the string (`source_departure_token_index`), with deterministic `occurrence_index SMALLINT NOT NULL` (no default).
+- **Confirmation Required:** No.
+
+---
+
+### DQI-011: Bidirectional Route Collisions in Reference Stop List
+- **Severity:** LOW
+- **Source File:** `data/raw/routes/route_stations_Nashik.csv`
+- **Affected Elements:** Auxiliary stop sequences.
+- **Description:** Multiple stops in sequence lack explicit direction tags in legacy auxiliary exports, causing bidirectional collision if merged without direction qualifiers.
+- **Impact on AI Agent:** Potential mixing of outbound and inbound stop orders.
+- **Mitigation:** Enforce composite key `(route_id, direction_id, stop_sequence)` and isolate physical platform identifiers (`station_id`) from logical stations (`display_station_id`).
+- **Confirmation Required:** No.
+
+---
+
+### DQI-012: Fare Verification CHECK Constraint SQL NULL Bypass (FND-SCHEMA-004)
+- **Severity:** CRITICAL
+- **Source Specification:** Proposed DDL (`docs/database/PROPOSED_POSTGRESQL_SCHEMA.md`)
+- **Affected Elements:** Table `trips`, constraint `chk_fare_verification`.
+- **Description:** Standard SQL boolean evaluation uses three-valued logic (`TRUE`, `FALSE`, `UNKNOWN/NULL`). A disjunctive constraint such as `CHECK (fare_verification_status != 'VERIFIED_PAID' OR verification_code IS NOT NULL)` evaluates to `NULL` when `fare_verification_status` is `NULL`, silently bypassing validation and allowing unverified rows without codes.
+- **Impact on AI Agent:** Ingestion could store unverified fares as verified, permitting callers to receive unverified fare quotes.
+- **Mitigation:** Harden constraint using exact logical validation evaluated with `IS TRUE`:
+  ```sql
+  CONSTRAINT chk_fare_verification CHECK (
+      (CASE 
+          WHEN fare_verification_status IN ('UNVERIFIED', 'UNAVAILABLE') THEN fare_amount IS NULL
+          WHEN fare_verification_status = 'VERIFIED_PAID' THEN (fare_amount IS NOT NULL AND fare_amount > 0)
+          WHEN fare_verification_status = 'VERIFIED_ZERO_FARE' THEN fare_amount = 0
+          ELSE FALSE
+      END) IS TRUE
+  )
+  ```
+  Validation rules enforced:
+  - `UNVERIFIED` or `UNAVAILABLE` => `fare_amount IS NULL`
+  - `VERIFIED_PAID` => `fare_amount IS NOT NULL AND fare_amount > 0`
+  - `VERIFIED_ZERO_FARE` => `fare_amount = 0`
+  - Any other or NULL status => `FALSE`
+  - The complete CASE expression is checked with `IS TRUE`.
+- **Confirmation Required:** No (defensive schema hardening).
+
+---
+
+### DQI-013: Missing Tariff Versioning Metadata (FND-SCHEMA-005)
+- **Severity:** HIGH
+- **Source Files:** `data/raw/fare/fare_matrix.pdf`, `data/raw/fare/New Fare Passes.pdf`, `data/raw/fare/bus_passes.json`
+- **Affected Elements:** Fare tables and pass rates.
+- **Description:** Raw fare assets do not contain explicit database-ready version identifiers, gazette notification references, or temporal validity ranges (`effective_from`, `effective_to`).
+- **Impact on AI Agent:** Inability to handle annual fare revisions, historical fare auditing, or scheduled future tariff activations.
+- **Mitigation:** Introduce master table `tariff_versions` with explicit temporal validity and approval metadata. All fare tables foreign key to `tariff_versions(tariff_id)`.
+- **Confirmation Required:** Operator to provide gazette notification numbers and official effective dates.
+
+---
+
+### DQI-014: Missing Source Lineage and Staging Traceability Metadata (FND-SCHEMA-006)
+- **Severity:** MEDIUM
+- **Source Files:** All raw source assets across routes, timetables, and fares.
+- **Affected Elements:** Production relational tables.
+- **Description:** Derived relational models lack direct back-references to physical source files, row numbers, and raw string tokens, preventing forensic data lineage audits when errors occur.
+- **Impact on AI Agent:** Difficult to debug why the AI agent produced a specific response if the underlying database record cannot be traced to raw source data.
+- **Mitigation:** Mandate source lineage columns across all production and audit tables (`source_routepartid`, `source_row_number`, `source_route_array_index`, `source_departure_token_index`, `raw_departure_string`, `raw_arrival_text`).
+- **Confirmation Required:** No.
+
+---
+
+### DQI-015: Fare Matrix Distance Slab Boundary Ambiguity (FND-026)
+- **Severity:** HIGH
+- **Source File:** `data/raw/fare/fare_matrix.pdf`
+- **Affected Elements:** 32 distance stages (e.g., `0.1 - 2.0 km`, `2.1 - 4.0 km`).
+- **Description:** Boundary points in PDF distance slabs can introduce rounding ambiguity if modeled with inclusive lower and upper floats (e.g., does 2.05 km map to Stage 1 or Stage 2?).
+- **Impact on AI Agent:** Voice agent could quote two different fares for the same trip depending on floating-point rounding.
+- **Mitigation:** Boundary convention (e.g., whether stages follow `[min_km, max_km)`, `(min_km, max_km]`, or discrete points) is documented as **OPEN / PENDING OPERATOR CONFIRMATION**. Ingestion must **NOT** assume `[min_km, max_km)` as confirmed source behavior, and exclusion constraints (`EXCLUDE USING gist`) must **NOT** be activated based on an unconfirmed boundary rule.
+- **Confirmation Required:** YES (Operator confirmation required on boundary inclusivity and overlap rules).
+
+---
+
+### DQI-016: Above-62-km Distance Slab Blank Municipal Base Fare (FND-023 / FND-029)
+- **Severity:** HIGH
+- **Source File:** `data/raw/fare/fare_matrix.pdf`
+- **Affected Elements:** Row 32 (Distance stage above 62.0 km).
+- **Description:** In `fare_matrix.pdf`, Row 32 leaves the municipal adult fare, child fare, and luggage charges blank/unpopulated. Only the Government Maximum ceiling rate (₹30.00 per 10 km) is specified.
+- **Impact on AI Agent:** If a caller inquires about a long-distance intercity or suburban route exceeding 62 km, the agent will encounter a null fare or hallucinate a rate.
+- **Mitigation:** Explicitly store `NULL` for municipal base rates in Row 32 of `fare_stage_rates`, record `government_max_fare_inr = 30.00`, and flag `is_unspecified_base_fare = TRUE`. The voice agent must state that fares for journeys above 62 km require manual conductor assessment under the ceiling rate.
+- **Confirmation Required:** YES (Operator clarification required on whether municipal rates scale linearly beyond 62 km).
+
+---
+
+### DQI-017: Departure Token Collisions and Independent Attribute Lineage (DEF-006)
+- **Severity:** HIGH
+- **Source File:** `data/raw/timetables/citylinc_timetables.json`
+- **Affected Elements:** 120 route blocks containing 2,318 departure tokens across `source_departures` and `destination_departures` string attributes.
+- **Description:** In `citylinc_timetables.json`, departures are stored in **string attributes** (not nested arrays). Multiple departure times repeat within the same route block across directions and frequencies.
+- **Conditional Preservation Notice:** Complete preservation of all 2,318 tokens depends on complete parsing, valid route/direction mapping, and successful unique occurrence assignment. Ingestion must not claim unconditional preservation without fulfilling these criteria.
+- **Impact on AI Agent:** Missing departures would cause callers to miss available buses.
+- **Mitigation:** Structure `route_departures` with independent lineage tracking: `source_route_array_index` (0–119), `departure_attribute` (`'source_departures'` or `'destination_departures'`), and `source_departure_token_index`, with deterministic `occurrence_index SMALLINT NOT NULL` (without default), uniquely constrained on `(route_code, direction, departure_time, occurrence_index)`.
+- **Confirmation Required:** No.
+
+---
+
+### DQI-018: Staging Schema Isolation and Premature Foreign Key Constraints (DEF-007 / DEF-009)
+- **Severity:** CRITICAL
+- **Source Architecture:** Intermediate staging pipeline (`staging` schema).
+- **Affected Elements:** Staging tables `stg_routes`, `stg_trips`, `stg_route_stops`.
+- **Description:** Prematurely applying foreign keys and strict constraints in staging causes ingestion failure due to raw source anomalies (e.g., 128 routes without trips, consecutive duplicate stops, unconfirmed status codes).
+- **Impact on AI Agent:** Ingestion pipeline crashes, preventing data loading entirely.
+- **Mitigation:** Isolate staging in `staging` schema marked `PROPOSED — NOT IMPLEMENTED`. Staging tables retain raw columns as unconstrained `TEXT`/`VARCHAR` without foreign keys. Cleansing, validation, and typing occur during promotion into `public` schema.
+- **Confirmation Required:** No.
+
+---
+
+## 3. Comprehensive Issue Summary & Action Matrix
+
+| Issue ID | Severity | Scope / Entity | Primary Mitigation | Status |
+|:---|:---|:---|:---|:---|
+| **DQI-001** | HIGH | Timetable CSV | Positional column index mapping; assert redundant headers | Solved by Ingestion Spec |
+| **DQI-002** | CRITICAL | Route Identifiers | Disambiguate `source_rno` vs `source_routeno`; expose `route_code` | Solved by Schema Spec |
+| **DQI-003** | HIGH | Stop Coordinates | `route_stop_coordinates_audit`; `matches_observed_offset_pattern` | Guardrailed |
+| **DQI-004** | HIGH | Stop Sequences | Preserve all 12,909 stops; flag 63 duplicate pairs (126 records) | Solved by Schema Spec |
+| **DQI-005** | CRITICAL | Timetable Fares | Mandatory interpretation statement; `raw_stationfare`; NULL fare | Guardrailed |
+| **DQI-006** | MEDIUM | Route Registry | Flag 128 unscheduled routes with `is_active = FALSE` | Solved by Schema Spec |
+| **DQI-007** | HIGH | Trip Status | Document exact counts (0: 2085, 2: 1237, 6: 218, 9: 7); lookup table | Guardrailed |
+| **DQI-008** | MEDIUM | Timetable ETA | `raw_arrival_text`; `provisional_is_next_day_arrival` & duration | Solved by Schema Spec |
+| **DQI-009** | HIGH | Fare Passes | ₹5,250 90D pass; companion 50%; student 50%/66.66%; fixed route | Solved by Fare DDL |
+| **DQI-010** | MEDIUM | Summary Departures | String attributes (not nested arrays); independent tracking of array index, attribute, token index | Solved by Schema Spec |
+| **DQI-011** | LOW | Stop Collisions | Composite key `(route_id, direction_id, stop_sequence)` | Solved by Schema Spec |
+| **DQI-012** | CRITICAL | Fare Constraints | Exact 5-point CASE validation with `IS TRUE` | Solved by Schema Spec |
+| **DQI-013** | HIGH | Tariff Governance | Introduce `tariff_versions` master table | Solved by Fare DDL |
+| **DQI-014** | MEDIUM | Data Lineage | Retain raw strings, row numbers, and array indices | Solved by Schema Spec |
+| **DQI-015** | HIGH | Fare Matrix | Boundary rule OPEN / PENDING OPERATOR CONFIRMATION; exclusion constraint inactive | Open Operator Decision |
+| **DQI-016** | HIGH | Long-Distance Fare | Row 32 municipal base fare NULL; Gov Max ₹30/10km preserved | Solved by Fare DDL |
+| **DQI-017** | HIGH | Departure Tokens | String attributes; independent tracking of array index, attribute, token index; deterministic occurrence index | Solved by Schema Spec |
+| **DQI-018** | CRITICAL | Staging Isolation | Decoupled `staging` schema marked `PROPOSED — NOT IMPLEMENTED` | Solved by Architecture |
+
+---
+
+## 4. Architectural Verification Sign-off
+
+- **Catalog Completeness:** 18 identified data quality issues fully specified with exact mitigations.
+- **Safety Gate:** Phase 2 implementation strictly locked pending operator clarification on DQI-005, DQI-006, DQI-007, DQI-009, and DQI-016.
+- **Read-Only Verification:** Zero SQL executed; zero database objects created.
+
+---
+
+## Open Decisions & Unresolved Operator Policies
+
+The following nine transit operational, semantic, and tariff ambiguities cannot be resolved from raw source assets alone and are explicitly retained as **OPEN / PENDING OPERATOR CONFIRMATION**:
+
+1. **ETA Semantics:** Whether `eta` in `all_route_timetables.csv` represents scheduled depot departure time, first revenue stop time, or scheduled arrival at the first timing point, and whether `arrivalatdestination` represents scheduled route completion or vehicle turnaround.
+2. **Overnight / Midnight Crossing Handling:** Definition of operational transit service dates across midnight. Specifically, whether trips with `arrivalatdestination < eta` represent next-day arrivals crossing 24:00 or multi-day dispatches, and the exact cut-off hour (e.g., 03:00 / 04:00 AM) for transit operating day rollover.
+3. **Fare Slab Boundary Conventions:** Whether distance stages in `fare_matrix.pdf` follow half-open continuous intervals `[min_km, max_km)`, `(min_km, max_km]`, or discrete decimal increments, and how exact boundary distances (e.g., exactly 2.0 km or 4.0 km) are charged. Exclusion constraints must remain inactive and must not be activated based on an unconfirmed boundary rule.
+4. **Current Tariff Temporal Validity:** The official municipal gazette notification numbers, legal effective dates (`effective_from`, `effective_to`), and confirmation of whether the 2022/2023 fare matrix remains currently active or has been superseded.
+5. **Student Concession Rounding Rules:** Clarification on whether student pass discount is legally 66.66% per `New Fare Passes.pdf` or 66.60% (₹2,100) per `bus_passes.json`, and the mathematical rounding rules applicable to fractional rupee values.
+6. **Concession Eligibility & Verification Documentation:** Precise documentation standards, age limits, and municipal residency criteria (inside NMC limits vs outer suburban routes) required for issuing concession passes.
+7. **Pass Stacking & Combinability Rules:** Operating rules governing whether passes can be combined with single-journey tickets, transfer discounts, or luggage fees, or whether multiple concessions can be combined.
+8. **Route-Specific Pass Calculation Formula:** The exact single-trip base fare or tariff stage applied to compute fixed-route passes (1-month = 20 single trips, 3-month = 50 single trips) on routes with variable stage fares or route variations.
+9. **Route Operational Status & Frequency:** Operational status, service frequency, and scheduling policy for the 128 routes in the master registry that lack scheduled trips in `all_route_timetables.csv`.

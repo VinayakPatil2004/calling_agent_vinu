@@ -1,0 +1,349 @@
+# CityLinc AI Calling Agent — Production PostgreSQL Schema Specification
+
+**Document ID:** `PROPOSED_POSTGRESQL_SCHEMA.md`  
+**Phase:** P0.2 — Final Database Design Specification (Post-Review Revision 2)  
+**Status:** DRAFT / PRODUCTION-READY DDL PROPOSAL  
+**Classification:** PostgreSQL Physical Database Architecture Specification  
+**Execution Gate:** DESIGN ONLY — ZERO TABLES CREATED IN DATABASE
+
+---
+
+## 1. Architectural Principles & Critical Review Decisions
+
+This schema serves as the unified, highly normalized, low-latency relational backend for the **CityLinc Nashik AI Voice Calling Agent** (FastAPI backend + Dograh voice orchestrator).
+
+### Mandatory Review Guardrails:
+1. **Preservation of All 12,909 Stops:** `route_stops` retains 100% of source records. Consecutive duplicates on routes `6710`, `6908`, and `6866` are marked with `is_consecutive_duplicate = TRUE` as a validation flag. Default production views **do not** filter out these records. Deduplication views are designated as **optional and approval-dependent**.
+2. **Flexible & Safe Fare Constraints:** Raw `stationfare` (`'0'`) is preserved in `raw_stationfare`. The operational `fare_amount` remains `NULL` under `fare_verification_status = 'UNVERIFIED'`. Legitimate zero fares are explicitly permitted under `fare_verification_status = 'VERIFIED_ZERO_FARE'` when verified by CityLinc operators.
+3. **Fidelity to Source Timetable Semantics:** Field names `source_eta` and `source_arrival_at_destination` preserve source columns `eta` and `arrivalatdestination` without making unsupported semantic leaps to "departure time". Verbatim time strings are preserved.
+4. **Independent Route Identifier Lineage:** `source_rno` (passenger line number) and `source_routeno` (operational category in route master, passenger line number in timetable) are stored and tracked independently without global renaming collisions.
+5. **Spatial Traceability:** Provisional center coordinates are stored in `stations`, while all four synthetic bounding coordinates (`stationlat1/2`, `stationlong1/2`) are preserved in `stg_station_coordinates_audit`.
+
+---
+
+## 2. Entity-Relationship Diagram
+
+```text
+  +------------------+         +---------------------+
+  |   data_sources   | <-------+   import_batches    |
+  +------------------+         +----------+----------+
+                                          |
+        +---------------------------------+-------------------------------+
+        |                                 |                               |
+        v                                 v                               v
++-------------------+           +-------------------+           +-------------------+
+| logical_stations  |           |      routes       |           |    pass_types     |
++---------+---------+           +---------+---------+           +---------+---------+
+          |                               |                               |
+          | 1:N                           | 1:N                           | 1:N
+          v                               v                               v
++-------------------+           +-------------------+           +-------------------+
+|     stations      | <---------+    route_stops    |           |   pass_options    |
++---------+---------+           +-------------------+           +-------------------+
+          |                               |
+          | 1:1                           | 1:N
+          v                               v
++-------------------+           +-------------------+           +-------------------+
+| stg_station_coords|           |       trips       | --------> |     vehicles      |
+|     (Audit)       |           +---------+---------+           +-------------------+
++-------------------+                     |
+                                          | [Future Scope 1:N]
+                                          v
+                                +-------------------+
+                                |  trip_stop_times  |
+                                |   (GTFS Future)   |
+                                +-------------------+
+```
+
+---
+
+## 3. Production PostgreSQL DDL Specification
+
+```sql
+-- ============================================================================
+-- EXTENSIONS & SCHEMAS
+-- ============================================================================
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
+
+-- Schema for raw ingestion and quality staging
+CREATE SCHEMA IF NOT EXISTS staging;
+
+-- Production schema
+SET search_path TO public;
+
+-- ============================================================================
+-- 1. AUDIT & INGESTION METADATA
+-- ============================================================================
+CREATE TABLE data_sources (
+    source_id               SERIAL PRIMARY KEY,
+    file_name               VARCHAR(128) NOT NULL UNIQUE,
+    file_format             VARCHAR(16) NOT NULL CHECK (file_format IN ('JSON', 'CSV')),
+    file_size_bytes         BIGINT NOT NULL,
+    record_count            INTEGER NOT NULL,
+    description             TEXT,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE import_batches (
+    batch_id                UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    source_id               INTEGER NOT NULL REFERENCES data_sources(source_id) ON DELETE RESTRICT,
+    batch_status            VARCHAR(32) NOT NULL CHECK (batch_status IN ('STARTED', 'STAGED', 'PROMOTED', 'FAILED')),
+    records_ingested        INTEGER NOT NULL DEFAULT 0,
+    anomalies_flagged       INTEGER NOT NULL DEFAULT 0,
+    started_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    completed_at            TIMESTAMPTZ,
+    error_log               TEXT
+);
+
+-- ============================================================================
+-- 2. STATION ARCHITECTURE (LOGICAL VS PHYSICAL)
+-- ============================================================================
+-- Logical Stations: Passenger-facing bus stops (Distinct: 786)
+CREATE TABLE logical_stations (
+    display_station_id      INTEGER PRIMARY KEY,              -- from 'displaystationid'
+    station_name            VARCHAR(255) NOT NULL,            -- from 'displayname'
+    search_vector           TEXT GENERATED ALWAYS AS (LOWER(TRIM(station_name))) STORED,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    import_batch_id         UUID REFERENCES import_batches(batch_id)
+);
+
+-- Physical Stations: Directional platform locations on roadways (Distinct: 1,187)
+CREATE TABLE stations (
+    station_id              INTEGER PRIMARY KEY,              -- from 'stationid'
+    display_station_id      INTEGER NOT NULL REFERENCES logical_stations(display_station_id) ON DELETE RESTRICT,
+    platform_name_raw       VARCHAR(255) NOT NULL,            -- from 'stationname'
+    platform_direction      VARCHAR(16) NOT NULL CHECK (platform_direction IN ('Up', 'Down', 'Bidirectional')),
+    latitude                NUMERIC(10, 6) NOT NULL CHECK (latitude BETWEEN 18.0 AND 22.0),
+    longitude               NUMERIC(10, 6) NOT NULL CHECK (longitude BETWEEN 72.0 AND 76.0),
+    is_provisional_coord    BOOLEAN NOT NULL DEFAULT TRUE,    -- Flag indicating awaiting GPS survey
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    import_batch_id         UUID REFERENCES import_batches(batch_id)
+);
+
+-- Audit Table: Preserves synthetic bounding-box coordinates for 100% lineage
+CREATE TABLE stg_station_coordinates_audit (
+    station_id              INTEGER PRIMARY KEY REFERENCES stations(station_id) ON DELETE CASCADE,
+    center_lat              NUMERIC(10, 6) NOT NULL,
+    center_lon              NUMERIC(10, 6) NOT NULL,
+    station_lat1            NUMERIC(10, 6) NOT NULL,          -- center_lat + 0.05
+    station_long1           NUMERIC(10, 6) NOT NULL,          -- center_lon - 0.05
+    station_lat2            NUMERIC(10, 6) NOT NULL,          -- center_lat - 0.05
+    station_long2           NUMERIC(10, 6) NOT NULL,          -- center_lon + 0.05
+    offset_formula_verified BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- ============================================================================
+-- 3. ROUTE ARCHITECTURE (INDEPENDENT IDENTIFIER PRESERVATION)
+-- ============================================================================
+CREATE TABLE routes (
+    route_id                INTEGER PRIMARY KEY,              -- from 'routeid' (Distinct 315)
+    source_rno              VARCHAR(32) NOT NULL,             -- raw 'rno' from registry (e.g. '101', '129I')
+    source_routeno          INTEGER NOT NULL,                 -- raw 'routeno' from registry (values: 3, 4, 6)
+    route_code              VARCHAR(32) GENERATED ALWAYS AS (source_rno) STORED, -- Standard query alias
+    direction               VARCHAR(8) NOT NULL CHECK (direction IN ('Up', 'Down')),
+    corridor_name           VARCHAR(255) NOT NULL,            -- from 'routename'
+    corridor_name_with_code VARCHAR(255) NOT NULL,            -- from 'route_name_wb'
+    full_display_name       VARCHAR(255) NOT NULL,            -- from 'displayfullroutename'
+    origin_station_id       INTEGER NOT NULL REFERENCES stations(station_id) ON DELETE RESTRICT,
+    destination_station_id  INTEGER NOT NULL REFERENCES stations(station_id) ON DELETE RESTRICT,
+    configured_stop_count   INTEGER NOT NULL CHECK (configured_stop_count > 0),
+    geometry_point_count    INTEGER NOT NULL DEFAULT 0,
+    is_active_schedule      BOOLEAN NOT NULL DEFAULT TRUE,    -- FALSE for the 4 routes lacking timetables
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    import_batch_id         UUID REFERENCES import_batches(batch_id),
+    CONSTRAINT uq_route_identity UNIQUE (route_id, direction)
+);
+
+-- ============================================================================
+-- 4. ROUTE STOP SEQUENCES (ALL 12,909 RECORDS PRESERVED)
+-- ============================================================================
+CREATE TABLE route_stops (
+    route_stop_id           INTEGER PRIMARY KEY,              -- from 'routepartid' (Distinct 12,909)
+    route_id                INTEGER NOT NULL REFERENCES routes(route_id) ON DELETE RESTRICT,
+    station_id              INTEGER NOT NULL REFERENCES stations(station_id) ON DELETE RESTRICT,
+    stop_sequence           INTEGER NOT NULL CHECK (stop_sequence > 0),
+    distance_from_origin_km NUMERIC(8, 2) NOT NULL DEFAULT 0.0 CHECK (distance_from_origin_km >= 0.0),
+    is_consecutive_duplicate BOOLEAN NOT NULL DEFAULT FALSE,   -- Validation flag (Routes 6710, 6908, 6866)
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    import_batch_id         UUID REFERENCES import_batches(batch_id)
+);
+
+-- ============================================================================
+-- 5. FLEET & DISPATCH SCHEDULE (FIDELITY TO SOURCE TIMETABLE)
+-- ============================================================================
+CREATE TABLE vehicles (
+    vehicle_id              SERIAL PRIMARY KEY,
+    registration_number     VARCHAR(32) NOT NULL UNIQUE,     -- from 'vehicleno' (e.g. 'MH-15-GV-8161')
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE trip_status_lookup (
+    status_code             INTEGER PRIMARY KEY,
+    status_label            VARCHAR(64) NOT NULL,
+    description             TEXT,
+    is_operational          BOOLEAN NOT NULL DEFAULT TRUE
+);
+
+INSERT INTO trip_status_lookup (status_code, status_label, description, is_operational) VALUES
+(0, 'Code_0_Unconfirmed', 'Raw status code 0 (58.8% of trips)', TRUE),
+(2, 'Code_2_Unconfirmed', 'Raw status code 2 (34.9% of trips)', TRUE),
+(6, 'Code_6_Unconfirmed', 'Raw status code 6 (6.1% of trips)', TRUE),
+(9, 'Code_9_Unconfirmed', 'Raw status code 9 (0.2% of trips)', TRUE);
+
+CREATE TABLE trips (
+    trip_id                 INTEGER PRIMARY KEY,              -- from 'tripid' (Distinct 3,547)
+    route_id                INTEGER NOT NULL REFERENCES routes(route_id) ON DELETE RESTRICT,
+    vehicle_id              INTEGER NOT NULL REFERENCES vehicles(vehicle_id) ON DELETE RESTRICT,
+    trip_status_code        INTEGER NOT NULL REFERENCES trip_status_lookup(status_code) ON DELETE RESTRICT,
+    source_eta              TIME NOT NULL,                    -- Preserves source column 'eta'
+    source_arrival_at_destination TIME NOT NULL,              -- Preserves source column 'arrivalatdestination'
+    raw_eta_text            VARCHAR(16) NOT NULL,             -- Raw string value (e.g. '20:15')
+    raw_arrival_text        VARCHAR(16) NOT NULL,             -- Raw string value (e.g. '21:15')
+    source_start_station_name VARCHAR(255) NOT NULL,          -- from 'starttrip'
+    source_end_station_name   VARCHAR(255) NOT NULL,          -- from 'endtrip'
+    source_stop_name          VARCHAR(255) NOT NULL,          -- from 'stopname'
+    source_timetable_rno      VARCHAR(32) NOT NULL,           -- from 'rno' in timetable
+    source_timetable_routeno  VARCHAR(32) NOT NULL,           -- from 'routeno' in timetable
+    is_next_day_arrival     BOOLEAN NOT NULL DEFAULT FALSE,   -- TRUE for the 9 midnight-crossing trips
+    scheduled_duration_mins INTEGER NOT NULL CHECK (scheduled_duration_mins > 0),
+    raw_stationfare         VARCHAR(32) NOT NULL DEFAULT '0', -- Preserves raw source value '0'
+    fare_amount             NUMERIC(8, 2) NULL,               -- Unverified fare is kept NULL
+    fare_verification_status VARCHAR(32) NOT NULL DEFAULT 'UNVERIFIED'
+        CHECK (fare_verification_status IN ('UNVERIFIED', 'VERIFIED_PAID', 'VERIFIED_ZERO_FARE', 'UNAVAILABLE')),
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    import_batch_id         UUID REFERENCES import_batches(batch_id),
+    CONSTRAINT chk_fare_verification CHECK (
+        (fare_verification_status = 'UNVERIFIED' AND fare_amount IS NULL) OR
+        (fare_verification_status = 'UNAVAILABLE' AND fare_amount IS NULL) OR
+        (fare_verification_status = 'VERIFIED_PAID' AND fare_amount > 0) OR
+        (fare_verification_status = 'VERIFIED_ZERO_FARE' AND fare_amount = 0)
+    )
+);
+
+-- ============================================================================
+-- 6. INTERMEDIATE STOP ARRIVAL TIMES (FUTURE SCOPE / GTFS EXTENSION)
+-- ============================================================================
+CREATE TABLE trip_stop_times (
+    trip_stop_time_id       BIGSERIAL PRIMARY KEY,
+    trip_id                 INTEGER NOT NULL REFERENCES trips(trip_id) ON DELETE CASCADE,
+    station_id              INTEGER NOT NULL REFERENCES stations(station_id) ON DELETE RESTRICT,
+    stop_sequence           INTEGER NOT NULL,
+    scheduled_arrival       TIME NULL,
+    scheduled_departure     TIME NULL,
+    is_interpolated         BOOLEAN NOT NULL DEFAULT FALSE,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_trip_stop_sequence UNIQUE (trip_id, stop_sequence)
+);
+
+-- ============================================================================
+-- 7. AGGREGATE ROUTE TIMETABLE BULLETIN (FROM CITYLINC_TIMETABLES.JSON)
+-- ============================================================================
+CREATE TABLE route_departures (
+    departure_id            SERIAL PRIMARY KEY,
+    route_code              VARCHAR(32) NOT NULL,
+    direction               VARCHAR(8) NOT NULL CHECK (direction IN ('Up', 'Down')),
+    departure_time          TIME NOT NULL,
+    raw_departure_string    TEXT,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT uq_route_departure UNIQUE (route_code, direction, departure_time)
+);
+
+-- ============================================================================
+-- 8. PASS SCHEMES & CONCESSIONS
+-- ============================================================================
+CREATE TABLE pass_types (
+    pass_type_code          VARCHAR(32) PRIMARY KEY,          -- 'STUDENT', 'OPEN_ENDED', 'FIXED_ROUTE'
+    pass_name               VARCHAR(64) NOT NULL,
+    description             TEXT,
+    city                    VARCHAR(64) NOT NULL DEFAULT 'Nashik',
+    is_active               BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE pass_options (
+    option_id               SERIAL PRIMARY KEY,
+    pass_type_code          VARCHAR(32) NOT NULL REFERENCES pass_types(pass_type_code) ON DELETE RESTRICT,
+    duration_days           INTEGER NOT NULL CHECK (duration_days > 0),
+    price_inr               NUMERIC(10, 2) NULL,              -- Populated for open-ended passes
+    concession_type         VARCHAR(32) NOT NULL CHECK (concession_type IN ('FLAT_PRICE', 'PERCENTAGE', 'FARE_DAYS')),
+    concession_percentage   NUMERIC(5, 2) NULL,               -- e.g. 50.00, 66.60
+    concession_fare_days    INTEGER NULL,                     -- e.g. 20, 50
+    raw_concession_text     VARCHAR(128) NULL,                -- Preserves original source text
+    created_at              TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_pass_pricing CHECK (
+        (concession_type = 'FLAT_PRICE' AND price_inr IS NOT NULL) OR
+        (concession_type = 'PERCENTAGE' AND concession_percentage IS NOT NULL) OR
+        (concession_type = 'FARE_DAYS' AND concession_fare_days IS NOT NULL)
+    )
+);
+
+-- ============================================================================
+-- 9. PERFORMANCE INDEXES
+-- ============================================================================
+CREATE INDEX idx_routes_code ON routes(route_code);
+CREATE INDEX idx_routes_source_rno ON routes(source_rno);
+CREATE INDEX idx_routes_direction ON routes(route_code, direction);
+CREATE INDEX idx_stations_display ON stations(display_station_id);
+CREATE INDEX idx_logical_stations_search ON logical_stations(search_vector);
+CREATE INDEX idx_route_stops_ordered ON route_stops(route_id, stop_sequence);
+CREATE INDEX idx_route_stops_station ON route_stops(station_id, route_id);
+CREATE INDEX idx_trips_next_bus ON trips(route_id, source_eta);
+CREATE INDEX idx_trips_vehicle ON trips(vehicle_id);
+CREATE INDEX idx_departures_search ON route_departures(route_code, direction, departure_time);
+
+-- ============================================================================
+-- 10. PRODUCTION VIEWS FOR VOICE CALLING AGENT
+-- ============================================================================
+
+-- Standard Production View: RETAINS ALL 12,909 RECORDS (Zero silent exclusions)
+CREATE OR REPLACE VIEW v_active_route_stops AS
+SELECT 
+    rs.route_stop_id,
+    rs.route_id,
+    r.route_code,
+    r.direction AS route_direction,
+    rs.stop_sequence,
+    s.station_id,
+    ls.station_name,
+    s.platform_name_raw,
+    s.platform_direction,
+    s.latitude,
+    s.longitude,
+    rs.distance_from_origin_km,
+    rs.is_consecutive_duplicate
+FROM route_stops rs
+JOIN routes r ON rs.route_id = r.route_id
+JOIN stations s ON rs.station_id = s.station_id
+JOIN logical_stations ls ON s.display_station_id = ls.display_station_id
+ORDER BY rs.route_id, rs.stop_sequence;
+
+-- Optional Experimental View: Awaiting Explicit CityLinc Operator Sign-off
+-- NOTE: DO NOT USE AS DEFAULT. Provided only for evaluation if operator confirms suppression.
+CREATE OR REPLACE VIEW v_route_stops_deduplicated_optional AS
+SELECT *
+FROM v_active_route_stops
+WHERE is_consecutive_duplicate = FALSE;
+
+-- Standard Trip Schedule View
+CREATE OR REPLACE VIEW v_active_trips_schedule AS
+SELECT 
+    t.trip_id,
+    r.route_code,
+    r.direction,
+    r.corridor_name,
+    v.registration_number AS vehicle_number,
+    t.source_eta AS eta,
+    t.source_arrival_at_destination AS arrival_at_destination,
+    t.is_next_day_arrival,
+    t.scheduled_duration_mins,
+    t.raw_stationfare,
+    t.fare_amount,
+    t.fare_verification_status,
+    tsl.status_label AS trip_status
+FROM trips t
+JOIN routes r ON t.route_id = r.route_id
+JOIN vehicles v ON t.vehicle_id = v.vehicle_id
+JOIN trip_status_lookup tsl ON t.trip_status_code = tsl.status_code
+ORDER BY r.route_code, t.source_eta;
+```

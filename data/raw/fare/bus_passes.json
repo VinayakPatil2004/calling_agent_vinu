@@ -1,0 +1,61 @@
+{
+  "passes": {
+    "student_pass": {
+      "name": "Student Pass",
+      "description": "Travel as you like in Nashik city bus",
+      "city": "Nashik",
+      "options": [
+        {
+          "duration_days": 30,
+          "concession": "Pay 50 % Concession"
+        },
+        {
+          "duration_days": 90,
+          "concession": "Pay 66.60 % Concession"
+        }
+      ]
+    },
+    "open_ended_pass": {
+      "name": "Open Ended Pass",
+      "description": "Travel as you like in Nashik city bus",
+      "city": "Nashik",
+      "options": [
+        {
+          "duration_days": 1,
+          "amount_inr": 110
+        },
+        {
+          "duration_days": 7,
+          "amount_inr": 530
+        },
+        {
+          "duration_days": 30,
+          "amount_inr": 2100
+        },
+        {
+          "duration_days": 90,
+          "amount_inr": 5250
+        },
+        {
+          "duration_days": 180,
+          "amount_inr": 9450
+        }
+      ]
+    },
+    "fixed_route_pass": {
+      "name": "Fixed Route Pass",
+      "description": "Fixed Route pass",
+      "city": "Nashik",
+      "options": [
+        {
+          "duration_days": 30,
+          "concession": "Pay 20 Days Fare"
+        },
+        {
+          "duration_days": 90,
+          "concession": "Pay 50 Days Fare"
+        }
+      ]
+    }
+  }
+}

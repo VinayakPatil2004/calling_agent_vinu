@@ -1,0 +1,354 @@
+"""
+CityLinc Multilingual Number & Transit Speech Formatter.
+Translates route numbers, timetable hours/minutes, fares, stop counts, and distances
+into natural phonetically correct spoken words for Marathi, Hindi, and English.
+
+Examples:
+Marathi:
+  101 -> एकशे एक
+  102 -> एकशे दोन
+  151 -> एकशे एकावन्न
+  202 -> दोनशे दोन
+  300 -> तीनशे
+  331 -> तीनशे एकतीस
+  08:36 -> आठ वाजून छत्तीस मिनिटांनी
+  ₹20 -> वीस रुपये
+
+Hindi:
+  101 -> एक सौ एक
+  202 -> दो सौ दो
+  300 -> तीन सौ
+  08:36 -> आठ बजकर छत्तीस मिनट पर
+  ₹20 -> बीस रुपये
+
+English:
+  101 -> One hundred one
+  202 -> Two hundred two
+  08:36 -> Eight thirty-six
+  ₹20 -> Twenty rupees
+"""
+import re
+from typing import Dict, Optional
+
+# Marathi 0 to 99
+MARATHI_NUMS: Dict[int, str] = {
+    0: "शून्य", 1: "एक", 2: "दोन", 3: "तीन", 4: "चार", 5: "पाच",
+    6: "सहा", 7: "सात", 8: "आठ", 9: "नऊ", 10: "दहा",
+    11: "अकरा", 12: "बारा", 13: "तेरा", 14: "चौदा", 15: "पंधरा",
+    16: "सोळा", 17: "सतरा", 18: "अठरा", 19: "एकोणीस", 20: "वीस",
+    21: "एकवीस", 22: "बावीस", 23: "तेवीस", 24: "चोवीस", 25: "पंचवीस",
+    26: "सव्वीस", 27: "सत्तावीस", 28: "अठ्ठावीस", 29: "एकोणतीस", 30: "तीस",
+    31: "एकतीस", 32: "बत्तीस", 33: "तेहतीस", 34: "चौतीस", 35: "पस्तीस",
+    36: "छत्तीस", 37: "सदतीस", 38: "अडतीस", 39: "एकोणचाळीस", 40: "चाळीस",
+    41: "एकेचाळीस", 42: "बेचाळीस", 43: "त्रेचाळीस", 44: "चव्वेचाळीस", 45: "पंचेचाळीस",
+    46: "शेहेचाळीस", 47: "सत्तेचाळीस", 48: "अठ्ठेचाळीस", 49: "एकोणपन्नास", 50: "पन्नास",
+    51: "एकावन्न", 52: "बावन्न", 53: "त्रेपन्न", 54: "चोपन्न", 55: "पंचावन्न",
+    56: "छप्पन्न", 57: "सत्तावन्न", 58: "अठ्ठावन्न", 59: "एकोणसाठ", 60: "साठ",
+    61: "एकसष्ठ", 62: "पासष्ठ", 63: "त्रेसष्ठ", 64: "चौसष्ठ", 65: "पासष्ठ",
+    66: "सहासष्ठ", 67: "सदसष्ठ", 68: "अडसष्ठ", 69: "एकोणसत्तर", 70: "सत्तर",
+    71: "एकाहत्तर", 72: "बहात्तर", 73: "त्र्याहत्तर", 74: "चौऱ्याहत्तर", 75: "पंचाहत्तर",
+    76: "शहात्तर", 77: "सत्याहत्तर", 78: "अठ्ठ्याहत्तर", 79: "एकोणऐंशी", 80: "ऐंशी",
+    81: "एक्याऐंशी", 82: "ब्याऐंशी", 83: "त्र्याऐंशी", 84: "चौऱ्याऐंशी", 85: "पंच्याऐंशी",
+    86: "शहाऐंशी", 87: "सत्याऐंशी", 88: "अठ्ठ्याऐंशी", 89: "एकोणनव्वद", 90: "नव्वद",
+    91: "एक्याण्णव", 92: "ब्याण्णव", 93: "त्र्याण्णव", 94: "चौऱ्याण्णव", 95: "पंच्याण्णव",
+    96: "शहाण्णव", 97: "सत्याण्णव", 98: "अठ्ठ्याण्णव", 99: "नव्व्याण्णव", 100: "शंभर"
+}
+
+# Hindi 0 to 99
+HINDI_NUMS: Dict[int, str] = {
+    0: "शून्य", 1: "एक", 2: "दो", 3: "तीन", 4: "चार", 5: "पाँच",
+    6: "छह", 7: "सात", 8: "आठ", 9: "नौ", 10: "दस",
+    11: "ग्यारह", 12: "बारह", 13: "तेरह", 14: "चौदह", 15: "पंद्रह",
+    16: "सोलह", 17: "सत्रह", 18: "अठारह", 19: "उन्नीस", 20: "बीस",
+    21: "इक्कीस", 22: "बाईस", 23: "तेईस", 24: "चौबीस", 25: "पच्चीस",
+    26: "छब्बीस", 27: "सत्ताईस", 28: "अट्ठाईस", 29: "उनतीस", 30: "तीस",
+    31: "इकतीस", 32: "बत्तीस", 33: "तैंतीस", 34: "चौंतीस", 35: "पैंतीस",
+    36: "छत्तीस", 37: "सैंतीस", 38: "अड़तीस", 39: "उनतालीस", 40: "चालीस",
+    41: "इकतालीस", 42: "बयालीस", 43: "तैंतालीस", 44: "चौवालीस", 45: "पैंतालीस",
+    46: "छियालीस", 47: "सैंतालीस", 48: "अड़तालीस", 49: "उनचास", 50: "पचास",
+    51: "इक्यावन", 52: "बावन", 53: "तिरपन", 54: "चौवन", 55: "पचपन",
+    56: "छप्पन", 57: "सत्तावन", 58: "अट्ठावन", 59: "उनसठ", 60: "साठ",
+    61: "इकसठ", 62: "बासठ", 63: "तिरसठ", 64: "चौंसठ", 65: "पैंसठ",
+    66: "छियासठ", 67: "सरसठ", 68: "अड़सठ", 69: "उनहत्तर", 70: "सत्तर",
+    71: "इकहत्तर", 72: "बहत्तर", 73: "तिहत्तर", 74: "चौहत्तर", 75: "पचहत्तर",
+    76: "छिहत्तर", 77: "सतहत्तर", 78: "अठहत्तर", 79: "उन्नासी", 80: "अस्सी",
+    81: "इक्यासी", 82: "बयासी", 83: "तिरासी", 84: "चौरासी", 85: "पचासी",
+    86: "छियासी", 87: "सत्तासी", 88: "अट्ठासी", 89: "नवासी", 90: "नब्बे",
+    91: "इक्यानवे", 92: "बानवे", 93: "तिरानवे", 94: "चौरानवे", 95: "पचानवे",
+    96: "छियानवे", 97: "सत्तानवे", 98: "अट्ठानवे", 99: "निन्यानवे", 100: "सौ"
+}
+
+# English numbers
+ENGLISH_ONES = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine",
+                "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen",
+                "seventeen", "eighteen", "nineteen"]
+ENGLISH_TENS = ["", "", "twenty", "thirty", "forty", "fifty", "sixty", "seventy", "eighty", "ninety"]
+
+# Letter phonetics
+LETTER_PHONETICS_MR = {
+    "A": "ए", "B": "बी", "C": "सी", "D": "डी", "E": "ई", "F": "एफ",
+    "G": "जी", "H": "एच", "I": "आय", "J": "जे", "K": "के", "L": "एल",
+    "M": "एम", "N": "एन", "O": "ओ", "P": "पी", "Q": "क्यू", "R": "आर",
+    "S": "एस", "T": "टी", "U": "यू", "V": "व्ही", "W": "डब्लू", "X": "एक्स",
+    "Y": "वाय", "Z": "झेड"
+}
+
+LETTER_PHONETICS_HI = {
+    "A": "ए", "B": "बी", "C": "सी", "D": "डी", "E": "ई", "F": "एफ",
+    "G": "जी", "H": "एच", "I": "आई", "J": "जे", "K": "के", "L": "एल",
+    "M": "एम", "N": "एन", "O": "ओ", "P": "पी", "Q": "क्यू", "R": "आर",
+    "S": "एस", "T": "टी", "U": "यू", "V": "वी", "W": "डब्ल्यू", "X": "एक्स",
+    "Y": "वाई", "Z": "ज़ेड"
+}
+
+
+def number_to_marathi_words(n: int) -> str:
+    """Converts an integer (0-9999) into standard Marathi verbal representation."""
+    if n in MARATHI_NUMS:
+        return MARATHI_NUMS[n]
+
+    if 100 <= n < 1000:
+        h = n // 100
+        rem = n % 100
+        h_words = {
+            1: "एकशे", 2: "दोनशे", 3: "तीनशे", 4: "चारशे", 5: "पाचशे",
+            6: "सहाशे", 7: "सातशे", 8: "आठशे", 9: "नऊशे"
+        }
+        h_str = h_words.get(h, f"{h}शे")
+        if rem == 0:
+            return h_str
+        rem_str = MARATHI_NUMS.get(rem, str(rem))
+        return f"{h_str} {rem_str}"
+
+    if 1000 <= n < 10000:
+        th = n // 1000
+        rem = n % 1000
+        th_word = MARATHI_NUMS.get(th, str(th)) + " हजार"
+        if rem == 0:
+            return th_word
+        return f"{th_word} {number_to_marathi_words(rem)}"
+
+    return str(n)
+
+
+def number_to_hindi_words(n: int) -> str:
+    """Converts an integer (0-9999) into standard Hindi verbal representation."""
+    if n in HINDI_NUMS:
+        return HINDI_NUMS[n]
+
+    if 100 <= n < 1000:
+        h = n // 100
+        rem = n % 100
+        h_words = {
+            1: "एक सौ", 2: "दो सौ", 3: "तीन सौ", 4: "चार सौ", 5: "पाँच सौ",
+            6: "छह सौ", 7: "सात सौ", 8: "आठ सौ", 9: "नौ सौ"
+        }
+        h_str = h_words.get(h, f"{h} सौ")
+        if rem == 0:
+            return h_str
+        rem_str = HINDI_NUMS.get(rem, str(rem))
+        return f"{h_str} {rem_str}"
+
+    if 1000 <= n < 10000:
+        th = n // 1000
+        rem = n % 1000
+        th_word = HINDI_NUMS.get(th, str(th)) + " हज़ार"
+        if rem == 0:
+            return th_word
+        return f"{th_word} {number_to_hindi_words(rem)}"
+
+    return str(n)
+
+
+def number_to_english_words(n: int) -> str:
+    """Converts an integer (0-9999) into standard English words."""
+    if 0 <= n < 20:
+        return ENGLISH_ONES[n].title()
+    if 20 <= n < 100:
+        tens = ENGLISH_TENS[n // 10]
+        ones = "" if (n % 10 == 0) else f" {ENGLISH_ONES[n % 10]}"
+        return f"{tens}{ones}".title()
+    if 100 <= n < 1000:
+        h = n // 100
+        rem = n % 100
+        h_str = f"{ENGLISH_ONES[h]} hundred".title()
+        if rem == 0:
+            return h_str
+        return f"{h_str} {number_to_english_words(rem)}"
+    if 1000 <= n < 10000:
+        th = n // 1000
+        rem = n % 1000
+        th_str = f"{ENGLISH_ONES[th]} thousand".title()
+        if rem == 0:
+            return th_str
+        return f"{th_str} {number_to_english_words(rem)}"
+    return str(n)
+
+
+def format_route_number(rno: str, lang: str = "mr-IN") -> str:
+    """
+    Pronounces route numbers with optional suffix (e.g. '331A' -> 'तीनशे एकतीस ए').
+    """
+    rno = rno.strip().upper()
+    m = re.match(r'^(\d+)([A-Z]?)$', rno)
+    if not m:
+        return rno
+
+    num_part = int(m.group(1))
+    suffix = m.group(2)
+
+    if lang.startswith("mr"):
+        num_spoken = number_to_marathi_words(num_part)
+        suf_spoken = f" {LETTER_PHONETICS_MR.get(suffix, suffix)}" if suffix else ""
+        return f"{num_spoken}{suf_spoken}"
+    elif lang.startswith("hi"):
+        num_spoken = number_to_hindi_words(num_part)
+        suf_spoken = f" {LETTER_PHONETICS_HI.get(suffix, suffix)}" if suffix else ""
+        return f"{num_spoken}{suf_spoken}"
+    else:
+        num_spoken = number_to_english_words(num_part)
+        suf_spoken = f" {suffix}" if suffix else ""
+        return f"{num_spoken}{suf_spoken}"
+
+
+def format_time_natural(time_str: str, lang: str = "mr-IN") -> str:
+    """
+    Converts '08:36' or '8:36' to natural spoken time.
+    Marathi: 'आठ वाजून छत्तीस मिनिटांनी'
+    Hindi: 'आठ बजकर छत्तीस मिनट पर'
+    English: 'Eight thirty-six'
+    """
+    m = re.match(r'^(\d{1,2}):(\d{2})$', time_str.strip())
+    if not m:
+        return time_str
+
+    h = int(m.group(1))
+    minute = int(m.group(2))
+
+    # Convert 24-hr to 12-hr for natural spoken delivery
+    display_h = h if 1 <= h <= 12 else (h - 12 if h > 12 else 12)
+
+    if lang.startswith("mr"):
+        h_word = MARATHI_NUMS.get(display_h, str(display_h))
+        if minute == 0:
+            return f"{h_word} वाजता"
+        elif minute == 15:
+            return f"सव्वा {h_word} वाजता" if display_h != 1 else "सव्वा वाजता"
+        elif minute == 30:
+            if display_h == 1:
+                return "दीड वाजता"
+            elif display_h == 2:
+                return "अडीच वाजता"
+            else:
+                return f"साडे {h_word} वाजता"
+        elif minute == 45:
+            next_h = display_h + 1 if display_h < 12 else 1
+            next_h_word = MARATHI_NUMS.get(next_h, str(next_h))
+            return f"पावणे {next_h_word} वाजता"
+        else:
+            m_word = MARATHI_NUMS.get(minute, str(minute))
+            return f"{h_word} वाजून {m_word} मिनिटांनी"
+
+    elif lang.startswith("hi"):
+        h_word = HINDI_NUMS.get(display_h, str(display_h))
+        if minute == 0:
+            return f"{h_word} बजे"
+        elif minute == 15:
+            return f"सवा {h_word} बजे"
+        elif minute == 30:
+            if display_h == 1:
+                return "डेढ़ बजे"
+            elif display_h == 2:
+                return "ढाई बजे"
+            else:
+                return f"साढ़े {h_word} बजे"
+        elif minute == 45:
+            next_h = display_h + 1 if display_h < 12 else 1
+            next_h_word = HINDI_NUMS.get(next_h, str(next_h))
+            return f"पौने {next_h_word} बजे"
+        else:
+            m_word = HINDI_NUMS.get(minute, str(minute))
+            return f"{h_word} बजकर {m_word} मिनट पर"
+
+    else:
+        h_word = ENGLISH_ONES[display_h].title()
+        if minute == 0:
+            return f"{h_word} o'clock"
+        elif minute < 10:
+            m_word = f"oh-{ENGLISH_ONES[minute]}"
+            return f"{h_word} {m_word}"
+        else:
+            m_word = number_to_english_words(minute)
+            return f"{h_word} {m_word}"
+
+
+def format_currency(amt: int, lang: str = "mr-IN") -> str:
+    """Formats fare currency (₹20 -> 'वीस रुपये')."""
+    if lang.startswith("mr"):
+        return f"{number_to_marathi_words(amt)} रुपये"
+    elif lang.startswith("hi"):
+        return f"{number_to_hindi_words(amt)} रुपये"
+    else:
+        return f"{number_to_english_words(amt)} rupees"
+
+
+def format_text_for_speech(text: str, lang: str = "mr-IN") -> str:
+    """
+    Transforms transit assistant response text into phonetically natural text
+    optimized for Sarvam TTS (Bulbul v3).
+    Replaces:
+    - Currency: ₹20 -> 'वीस रुपये'
+    - Timings: 08:36 -> 'आठ वाजून छत्तीस मिनिटांनी'
+    - Route numbers: 'मार्ग 101' -> 'मार्ग एकशे एक'
+    - Distances: '3.8 किमी' -> 'तीन पॉईंट आठ किलोमीटर'
+    - Stops count: '8 थांबे' -> 'आठ थांबे'
+    """
+    if not text:
+        return text
+
+    res = text
+
+    # 1. Currency: ₹20 or ₹ 20
+    def repl_curr(m):
+        val = int(m.group(1))
+        return format_currency(val, lang)
+    res = re.sub(r'₹\s*(\d+)', repl_curr, res)
+    res = re.sub(r'(\d+)\s*रुपये', lambda m: format_currency(int(m.group(1)), lang), res)
+
+    # 2. Timing: e.g. 08:36 or 14:15 followed by वाजता/बजे or standalone
+    def repl_time_post(m):
+        t_str = m.group(1)
+        return format_time_natural(t_str, lang)
+    res = re.sub(r'(\d{1,2}:\d{2})\s*(?:वाजता|बजे)?', repl_time_post, res)
+
+    # 3. Route mentions & lists: 'मार्ग 101', 'थेट बस मार्ग: 131, 331, 331A', 'रूट 202', 'Route 101', 'बस क्रमांक 331'
+    def repl_route_list(m):
+        pfx = m.group(1)
+        body = m.group(2)
+        return pfx + re.sub(r'\b\d{1,3}[A-Z]?\b', lambda rm: format_route_number(rm.group(0), lang), body)
+
+    res = re.sub(
+        r'((?:मार्ग|routes?|रूट|बस क्रमांक|बस नंबर)\s*[:]?\s*)((?:\d{1,3}[A-Z]?(?:,\s*|\s+(?:व|किंवा|आणि|or|and)\s+)?)+)',
+        repl_route_list,
+        res,
+        flags=re.IGNORECASE
+    )
+
+    # 4. Stop counts: '8 थांबे' -> 'आठ थांबे', '25 स्टॉप' -> 'पच्चीस स्टॉप'
+    if lang.startswith("mr"):
+        res = re.sub(r'(\d+)\s+थांबे', lambda m: f"{number_to_marathi_words(int(m.group(1)))} थांबे", res)
+    elif lang.startswith("hi"):
+        res = re.sub(r'(\d+)\s+स्टॉप', lambda m: f"{number_to_hindi_words(int(m.group(1)))} स्टॉप", res)
+
+    # 5. Distances: e.g. '3.8 किमी' or '10.0 किमी'
+    def repl_dist_mr(m):
+        whole = int(m.group(1))
+        dec = int(m.group(2))
+        w_word = number_to_marathi_words(whole)
+        d_word = number_to_marathi_words(dec)
+        if dec == 0:
+            return f"{w_word} किलोमीटर"
+        return f"{w_word} पॉईंट {d_word} किलोमीटर"
+    res = re.sub(r'(\d+)\.(\d+)\s*(?:किमी|km|किलोमीटर)', repl_dist_mr, res)
+
+    return res

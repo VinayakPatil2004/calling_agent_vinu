@@ -1,0 +1,102 @@
+"""
+Main FastAPI Application for CityLinc Multilingual Real-Time Voice Agent.
+"""
+from contextlib import asynccontextmanager
+from pathlib import Path
+from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+
+from backend.app.core.config import settings
+from backend.app.core.logging import logger
+from backend.app.api.rest_routes import router as api_router
+from backend.app.api.websocket_routes import router as ws_router
+from backend.app.api.location_routes import router as location_router
+from backend.app.api.transit_routes import routes_router, timetable_router, places_router
+from backend.app.api.telephony_routes import router as telephony_router
+from backend.app.api.voicelink_routes import router as voicelink_router
+from backend.app.services.citylinc_knowledge import knowledge_service
+from backend.app.services.call_restriction_service import call_restriction_service
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Application startup and shutdown lifecycle management."""
+    logger.info("=" * 60)
+    logger.info(f"Starting {settings.PROJECT_NAME} v{settings.VERSION}")
+    logger.info(f"Supported Languages: {', '.join(settings.SUPPORTED_LANGUAGES)}")
+    logger.info(f"STT Model: {settings.SARVAM_STT_MODEL} | TTS Model: {settings.SARVAM_TTS_MODEL}")
+    logger.info(f"Sarvam API Key Configured: {settings.has_sarvam_key}")
+    logger.info(f"CityLinc Knowledge Loaded: {len(knowledge_service.timetables)} timetable trips across {len(knowledge_service.routes_by_id)} route records ({len(knowledge_service.known_rnos)} unique route numbers), {len(knowledge_service.unique_station_ids)} stations.")
+    recovered_calls = call_restriction_service.recover_active_call_timeouts()
+    logger.info(f"Phase 4.5 Call Restriction Service: Max {settings.MAX_CONNECTED_CALLS_PER_DAY} calls/day (IST), {settings.MAX_CALL_DURATION_SECONDS}s max duration | Recovered {recovered_calls} active calls.")
+    logger.info("=" * 60)
+    yield
+    logger.info(f"Shutting down {settings.PROJECT_NAME}")
+
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+    version=settings.VERSION,
+    description="Multilingual real-time voice agent supporting Marathi, Hindi, and English.",
+    lifespan=lifespan
+)
+
+# CORS Configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Register API, WebSocket, Location & Transit Routers
+app.include_router(api_router)
+app.include_router(ws_router)
+app.include_router(location_router)
+app.include_router(routes_router)
+app.include_router(timetable_router)
+app.include_router(places_router)
+app.include_router(telephony_router)
+app.include_router(voicelink_router)
+
+# Static files directory
+STATIC_DIR = Path(__file__).resolve().parent / "static"
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
+
+@app.middleware("http")
+async def add_cache_control_header(request, call_next):
+    response = await call_next(request)
+    if request.url.path.startswith("/static/") or request.url.path == "/":
+        response.headers["Cache-Control"] = "no-cache, no-store, must-revalidate"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+    return response
+
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+@app.get("/", include_in_schema=False)
+async def serve_index():
+    """Serves the main Voice Agent web interface."""
+    index_path = STATIC_DIR / "index.html"
+    if index_path.exists():
+        return FileResponse(
+            str(index_path),
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"}
+        )
+    return {"message": "CityLinc Voice Agent API is running. UI not found."}
+
+
+@app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {
+        "status": "healthy",
+        "service": settings.PROJECT_NAME,
+        "sarvam_api_key_configured": settings.has_sarvam_key,
+        "timetables_loaded": len(knowledge_service.timetables),
+        "routes_loaded": len(knowledge_service.routes_by_number)
+    }
+
+
+

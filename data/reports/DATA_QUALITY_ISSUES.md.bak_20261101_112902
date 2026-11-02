@@ -1,0 +1,166 @@
+# CityLinc AI Calling Agent — Data Quality Issues Catalog
+
+**Document ID:** `DATA_QUALITY_ISSUES.md`  
+**Phase:** P0.2 — Final Database Design Specification (Post-Review Revision 2)  
+**Status:** DRAFT / APPROVED FOR DESIGN  
+**Classification:** Transit Data Architecture Quality Audit
+
+---
+
+## 1. Overview & Issue Taxonomy
+
+This catalog documents all structural anomalies, schema divergences, corrupted sequences, and semantic ambiguities discovered during the read-only audit of the CityLinc Nashik source files.
+
+Each issue is assigned a unique identifier, severity level, affected scope, and specific risk analysis detailing how the issue would negatively impact the **AI Voice Calling Agent** if not addressed by architectural guardrails.
+
+### Severity Classification:
+- **CRITICAL:** High risk of AI agent hallucination, false passenger guidance, or database ingestion failure.
+- **HIGH:** Risk of missing routes, broken foreign keys, or inaccurate schedule calculations.
+- **MEDIUM:** Semantic ambiguity or data redundancy requiring normalization.
+- **LOW:** Minor formatting inconsistency or informational metadata deficiency.
+
+---
+
+## 2. Catalog of Identified Issues
+
+### DQI-001: Duplicate Header Column Names in Timetable CSV
+- **Severity:** HIGH
+- **Source File:** `data/raw/all_route_timetables.csv`
+- **Affected Elements:** Header row columns at indices `(0, 18)`: `routeid`; `(1, 17)`: `routeno`; `(3, 16)`: `routename`.
+- **Description:** Standard CSV readers and SQL `COPY` loaders fail or overwrite values when identical column names appear multiple times in the header.
+- **Verification:** Inspection confirms columns 0 and 18, 1 and 17, and 3 and 16 have **zero discrepancies** across all 3,547 rows.
+- **Root Cause:** Upstream SQL export query joined the route master and trip tables with `SELECT *` without aliasing.
+- **Impact on AI Agent:** Script crashes during automated batch ingestion.
+- **Mitigation:** In target staging, retain indices 0, 1, and 3; discard the redundant duplicate join indices 16, 17, and 18 while logging lineage.
+- **Confirmation Required:** No (Deterministic deduplication).
+
+---
+
+### DQI-002: Semantic Divergence Between `routeno` and `rno` Across Datasets
+- **Severity:** HIGH
+- **Source Files:** `all_routes_stops.json`, `all_routes_stops.csv`, `all_route_timetables.csv`
+- **Affected Elements:** Columns `routeno` vs `rno`.
+- **Description:** 
+  - In `all_routes_stops.json` and `.csv`, `routeno` contains only integers `3`, `4`, and `6`, while `rno` contains the true public line numbers (e.g., `"101"`, `"129I"`, `"328T"`).
+  - In `all_route_timetables.csv`, column `routeno` contains the public line number (`"101"`), matching `rno`.
+- **Root Cause:** In the route registry database, `routeno` represents an operational depot/operator ID, whereas in the dispatch database, `routeno` was populated with the customer route line number.
+- **Impact on AI Agent:** If the agent queries `routes` by `routeno = '101'`, it returns zero rows, causing the voice bot to falsely state that Route 101 does not exist.
+- **Mitigation:** In target schema, preserve both columns independently: `source_rno` (customer line number) and `source_routeno` (operational category). Provide `route_code` as an explicit generated alias of `source_rno`.
+- **Confirmation Required:** Yes (Confirm official operator definitions).
+
+---
+
+### DQI-003: Synthetic Bounding Box Masking Actual Platform Coordinates
+- **Severity:** CRITICAL
+- **Source Files:** `all_routes_stops.json`, `all_routes_stops.csv`
+- **Affected Elements:** Columns `stationlat1`, `stationlong1`, `stationlat2`, `stationlong2`.
+- **Description:** 100% of rows (12,909 / 12,909) follow the exact artificial arithmetic offsets:
+  $$\text{stationlat1} = \text{center\_lat} + 0.05,\quad \text{stationlong1} = \text{center\_lon} - 0.05$$
+  $$\text{stationlat2} = \text{center\_lat} - 0.05,\quad \text{stationlong2} = \text{center\_lon} + 0.05$$
+- **Root Cause:** An upstream GIS extract generated an arbitrary 0.05-degree ($\approx 5.5\text{ km}$) bounding box around the center coordinate point.
+- **Impact on AI Agent:** If the caller asks "Which side of the road is the stop on?" or requests nearby stop navigation, using these coordinates would place the stop 5 kilometers away in rural terrain or agricultural fields.
+- **Mitigation:** Designate `center_lat` and `center_lon` as provisional stop coordinates. Store the four bounding columns in raw audit lineage tables (`stg_station_coordinates_audit`); do not expose them to the spatial routing engine.
+- **Confirmation Required:** Yes (Confirm that physical directional GPS surveys will replace provisional coordinates).
+
+---
+
+### DQI-004: Consecutive Back-to-Back Duplicate Stations in Route Sequences
+- **Severity:** CRITICAL
+- **Source Files:** `all_routes_stops.json`, `all_routes_stops.csv`
+- **Affected Elements:** Routes `6710` (`129I-Down`), `6908` (`328T-Down`), `6866` (`331G-Down`).
+- **Description:**
+  - Route `6710`: Station `1049` (`Bharat Nagar 1`) appears consecutively at sequence positions 36 and 37.
+  - Route `6908`: 39 stations appear duplicated back-to-back throughout the 105-stop sequence.
+  - Route `6866`: **100% of stations** (26 pairs, 52 total stops) appear duplicated back-to-back.
+- **Root Cause:** Repeated double-insertion ETL bug in the legacy GIS route export pipeline.
+- **Impact on AI Agent:** When a caller asks "What is the next stop?", the voice bot could state: "The next stop is Gangapur Gaon, and the stop after that is Gangapur Gaon."
+- **Mitigation:** All 12,909 source records are preserved in `route_stops`. The validation column `is_consecutive_duplicate` flags duplicates. Standard production views **do not** filter out these records. Deduplication views are strictly optional and approval-dependent.
+- **Confirmation Required:** Yes (Mandatory operator approval before suppressing in clean production views).
+
+---
+
+### DQI-005: Unpopulated Fares (`stationfare = 0`) in Dispatch Timetable
+- **Severity:** CRITICAL
+- **Source File:** `all_route_timetables.csv`
+- **Affected Elements:** Column `stationfare`.
+- **Description:** 100% of records (3,547 / 3,547) contain `stationfare = 0`.
+- **Root Cause:** CAD/AVL dispatch feeds track vehicle schedules and tracking intervals; fare stage tables reside in a separate ticketing/AFCS database not included in this extract.
+- **Impact on AI Agent:** Violating Rule 9 by treating unverified `0` as real fare would lead the AI voice agent to inform calling passengers that all bus travel in Nashik is completely free of charge.
+- **Mitigation:** Preserve raw `'0'` in `raw_stationfare`. Keep `fare_amount` as `NULL` under `fare_verification_status = 'UNVERIFIED'`. Allow legitimate verified zero fares under `fare_verification_status = 'VERIFIED_ZERO_FARE'` when verified by operators.
+- **Confirmation Required:** Yes (Operator confirmation on ticketing API integration).
+
+---
+
+### DQI-006: Routes in Master Registry Lacking Scheduled Trips
+- **Severity:** MEDIUM
+- **Source Files:** Cross-reference between `all_routes_stops.json` and `all_route_timetables.csv`.
+- **Affected Elements:** Route IDs `6625` (`104-Up`), `6784` (`163I-Down`), `7007` (`247-Down`), `6664` (`264-Down`).
+- **Description:** Exactly 4 of the 315 configured routes have zero trips in the timetable schedule.
+- **Root Cause:** Inactive seasonal routes, temporary detour variants, or missing dispatch schedules in the source extract.
+- **Impact on AI Agent:** If a caller asks when Route 104-Up departs, the AI agent must not hallucinate a departure time or crash with a null pointer exception.
+- **Mitigation:** Database schema enforces `LEFT JOIN` safety; status flags `is_active_schedule BOOLEAN` are attached to the route entity.
+- **Confirmation Required:** Yes (Confirm whether these 4 routes are retired or temporarily unscheduled).
+
+---
+
+### DQI-007: Unclassified Numerical Trip Status Codes
+- **Severity:** MEDIUM
+- **Source File:** `all_route_timetables.csv`
+- **Affected Elements:** Column `trip_status`.
+- **Description:** 
+  - Code `'0'`: 2,085 trips (58.8%)
+  - Code `'2'`: 1,237 trips (34.9%)
+  - Code `'6'`: 218 trips (6.1%)
+  - Code `'9'`: 7 trips (0.2%)
+- **Root Cause:** Proprietary transit management codes (e.g., Scheduled, In-Progress, Cancelled, Completed).
+- **Impact on AI Agent:** Guessing status could cause the bot to tell a passenger a bus is running when code '6' might signify a cancelled trip.
+- **Mitigation:** Store raw numerical code in `trip_status_code INT`. Create a dedicated lookup table `trip_status_lookup` populated only when CityLinc provides the official code dictionary.
+- **Confirmation Required:** Yes (Request official status dictionary from CityLinc).
+
+---
+
+### DQI-008: Overnight Trips Crossing Midnight (Inverted Time Deltas)
+- **Severity:** MEDIUM
+- **Source File:** `all_route_timetables.csv`
+- **Affected Elements:** Columns `eta` and `arrivalatdestination` on 9 trips.
+- **Description:** For 9 late-night trips departing between 23:10 and 23:55, arrival occurs between 00:20 and 00:40. Because dates are absent, naive subtraction yields negative durations (e.g., $00:40 - 23:40 = -23\text{ hours}$).
+- **Root Cause:** Timetable stores time-of-day strings (`HH:MM`) without service day date components.
+- **Impact on AI Agent:** Agent reporting "Your journey takes negative 23 hours" or crashing duration calculations.
+- **Mitigation:** Schema calculates duration modulo 24 hours ($+1440\text{ minutes}$) and sets boolean flag `is_next_day_arrival = TRUE`. Raw fields `source_eta` and `source_arrival_at_destination` are preserved.
+- **Confirmation Required:** No (Standard transit calculation rule).
+
+---
+
+### DQI-009: Unstructured Pass Concessions & Missing Eligibility Policies
+- **Severity:** HIGH
+- **Source File:** `bus_passes.json`
+- **Affected Elements:** Pass options for `student_pass` and `fixed_route_pass`.
+- **Description:** Concessions are stored as freeform strings (`"Pay 50 % Concession"`, `"Pay 20 Days Fare"`) without reference base fares, age limits, required identification documents, or validity dates.
+- **Root Cause:** Static CMS content extracted for mobile app display rather than a transactional rules engine.
+- **Impact on AI Agent:** Voice agent cannot calculate the actual rupee cost of a student pass or explain eligibility requirements to a citizen.
+- **Mitigation:** Propose normalized pass schema with separate columns for `raw_concession_text`, `concession_type` (`PERCENTAGE`, `DAY_COUNT`, `FLAT_AMOUNT`), and `eligibility_terms`.
+- **Confirmation Required:** Yes (Operator input needed for pass issuance guidelines).
+
+---
+
+### DQI-010: Aggregate Timetable Inconsistencies & String Redundancies
+- **Severity:** LOW
+- **Source File:** `citylinc_timetables.json`
+- **Affected Elements:** `source_departures`, `destination_departures`.
+- **Description:** Composite strings contain duplicate timestamps (e.g., `"13:20, 13:20"`) and 21 records have empty destination strings.
+- **Root Cause:** Manual operator data entry into a public portal bulletin.
+- **Impact on AI Agent:** Bot reading aloud identical departure times twice: "The bus departs at 1:20 PM and 1:20 PM."
+- **Mitigation:** Parse and store individual timestamps in a normalized `route_departures` table with unique constraints on `(route_code, direction, departure_time)`.
+- **Confirmation Required:** No.
+
+---
+
+### DQI-011: Bidirectional Route Collisions in Reference Stop List
+- **Severity:** LOW
+- **Source File:** `bus_stop.json`
+- **Affected Elements:** `route_no` = `106` and `106C`.
+- **Description:** Multiple JSON objects share the same `route_no` because Up and Down directions are not explicitly flagged.
+- **Root Cause:** Ad-hoc export script.
+- **Impact on AI Agent:** Negligible if master registry (`all_routes_stops.json`) is used as source of truth.
+- **Mitigation:** Relegate `bus_stop.json` to auxiliary reference status; use `all_routes_stops` as the authoritative source.
+- **Confirmation Required:** No.

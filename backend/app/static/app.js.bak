@@ -1,0 +1,961 @@
+/**
+ * CityLinc Multilingual Voice Agent Frontend Application
+ * Real-time voice pipeline with live diagnostics, time-domain RMS VAD, and manual/auto capture.
+ */
+
+// Application State
+const state = {
+  ws: null,
+  mediaStream: null,
+  audioTrack: null,
+  audioContext: null,
+  analyser: null,
+  timeDomainData: null,
+  frequencyData: null,
+  mediaRecorder: null,
+  recordedChunks: [],
+  isRecording: false,
+  isSpeechActive: false,
+  isManualRecording: false,
+  isPlayingAudio: false,
+  currentAudioUrl: null,
+  playbackStartTime: 0,
+  bargeInConsecutiveFrames: 0,
+  speechStartTime: 0,
+  lastVoiceTime: 0,
+  rmsVolume: 0,
+  ambientNoise: 0.012,               // Adaptive baseline ambient noise level
+  voiceThreshold: 0.024,             // Time-domain RMS threshold for speech onset (normal listening)
+  bargeInThreshold: 0.046,           // Balanced RMS threshold for barge-in (above AEC echo, catches normal speech)
+  bargeInGracePeriodMs: 160,         // Short grace period (160ms) allowing browser AEC to converge on speaker onset
+  bargeInRequiredFrames: 2,          // Sustained frames required for barge-in (2 frames = ~33ms)
+  silenceThresholdMs: 1000,          // Duration of silence to finalize utterance
+  minUtteranceMs: 400,               // Minimum duration of speech before finalizing
+  maxUtteranceMs: 15000,             // Maximum duration before forcing utterance cutoff
+  currentTurnId: 0,
+  selectedLanguage: 'auto',
+  bargeInOnsetTimestamp: 0,
+  lastMeasuredInterruptionLatencyMs: 0
+};
+
+// DOM Elements
+const elements = {
+  wsBadge: document.getElementById('ws-badge'),
+  micBadge: document.getElementById('mic-badge'),
+  voiceOrb: document.getElementById('voice-orb'),
+  orbIcon: document.getElementById('orb-icon'),
+  statusTitle: document.getElementById('agent-status-title'),
+  statusDesc: document.getElementById('agent-status-desc'),
+  visualizerCanvas: document.getElementById('visualizer-canvas'),
+  btnStart: document.getElementById('btn-start'),
+  btnStop: document.getElementById('btn-stop'),
+  btnTalkManual: document.getElementById('btn-talk-manual'),
+  btnInterrupt: document.getElementById('btn-interrupt'),
+  langSelect: document.getElementById('lang-select'),
+  transcriptFeed: document.getElementById('transcript-feed'),
+  textInput: document.getElementById('text-input'),
+  btnSendText: document.getElementById('btn-send-text'),
+  btnClearChat: document.getElementById('btn-clear-chat'),
+  apiKeyIndicator: document.getElementById('api-key-indicator'),
+  audioPlayer: document.getElementById('tts-audio-player'),
+  // Diagnostics Elements
+  micStagePill: document.getElementById('mic-stage-pill'),
+  micTrackName: document.getElementById('mic-track-name'),
+  micVuBar: document.getElementById('mic-vu-bar'),
+  micVuText: document.getElementById('mic-vu-text'),
+  micCapturedInfo: document.getElementById('mic-captured-info'),
+  micErrorBox: document.getElementById('mic-error-box')
+};
+
+// Canvas 2D Context
+const canvasCtx = elements.visualizerCanvas.getContext('2d');
+
+// --- Initialization ---
+window.addEventListener('DOMContentLoaded', () => {
+  setupEventListeners();
+  checkApiStatus();
+  drawIdleVisualizer();
+});
+
+function setupEventListeners() {
+  elements.btnStart.addEventListener('click', startConversation);
+  elements.btnStop.addEventListener('click', stopConversation);
+  elements.btnTalkManual.addEventListener('click', toggleManualRecording);
+  elements.btnInterrupt.addEventListener('click', () => triggerBargeIn(true));
+  
+  elements.langSelect.addEventListener('change', (e) => {
+    state.selectedLanguage = e.target.value;
+  });
+
+  // Text input submission (isolated path from audio)
+  elements.btnSendText.addEventListener('click', sendTextMessage);
+  elements.textInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendTextMessage();
+  });
+
+  // Clear chat
+  elements.btnClearChat.addEventListener('click', () => {
+    elements.transcriptFeed.innerHTML = '';
+    if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+      state.ws.send(JSON.stringify({ type: 'reset' }));
+    }
+  });
+
+  // Quick prompt chips
+  document.querySelectorAll('.prompt-chip').forEach(chip => {
+    chip.addEventListener('click', () => {
+      const promptText = chip.getAttribute('data-text');
+      elements.textInput.value = promptText;
+      sendTextMessage();
+    });
+  });
+
+  // Audio player events
+  elements.audioPlayer.addEventListener('ended', onAudioPlaybackEnded);
+}
+
+// --- Diagnostics UI Helpers ---
+function setMicStage(stageText, pillClass = 'pill-neutral') {
+  if (elements.micStagePill) {
+    elements.micStagePill.textContent = stageText;
+    elements.micStagePill.className = `pill ${pillClass}`;
+  }
+}
+
+function showMicError(message) {
+  if (elements.micErrorBox) {
+    elements.micErrorBox.textContent = `⚠️ Error: ${message}`;
+    elements.micErrorBox.style.display = 'block';
+  }
+  elements.micBadge.textContent = 'Mic: Error';
+  elements.micBadge.className = 'badge badge-offline';
+}
+
+function clearMicError() {
+  if (elements.micErrorBox) {
+    elements.micErrorBox.style.display = 'none';
+    elements.micErrorBox.textContent = '';
+  }
+}
+
+function updateApiKeyBadge(isActive) {
+  if (isActive) {
+    elements.apiKeyIndicator.textContent = 'Sarvam API Active';
+    elements.apiKeyIndicator.className = 'pill pill-success';
+    elements.apiKeyIndicator.title = 'Sarvam Saaras v4 STT & Bulbul v3 TTS active.';
+  } else {
+    elements.apiKeyIndicator.textContent = 'Test Mode (No Key)';
+    elements.apiKeyIndicator.className = 'pill pill-warning';
+    elements.apiKeyIndicator.title = 'Add SARVAM_API_KEY in backend/.env for live cloud voice synthesis.';
+  }
+}
+
+async function checkApiStatus() {
+  try {
+    const res = await fetch('/api/status?_t=' + Date.now(), { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    updateApiKeyBadge(data.sarvam_key_configured);
+  } catch (e) {
+    console.warn('API status check error:', e);
+    elements.apiKeyIndicator.textContent = 'Offline';
+    elements.apiKeyIndicator.className = 'pill pill-warning';
+  }
+}
+
+// --- WebSocket Connection ---
+function initWebSocket() {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${protocol}//${window.location.host}/ws/conversation`;
+
+  elements.wsBadge.textContent = 'Connecting...';
+  elements.wsBadge.className = 'badge badge-neutral';
+
+  state.ws = new WebSocket(wsUrl);
+
+  state.ws.onopen = () => {
+    elements.wsBadge.textContent = 'Connected';
+    elements.wsBadge.className = 'badge badge-online';
+    console.log('WebSocket connection established.');
+    checkApiStatus();
+  };
+
+  state.ws.onmessage = (event) => {
+    try {
+      handleServerMessage(JSON.parse(event.data));
+    } catch (e) {
+      console.error('Failed to parse WebSocket message:', e);
+    }
+  };
+
+  state.ws.onclose = () => {
+    elements.wsBadge.textContent = 'Disconnected';
+    elements.wsBadge.className = 'badge badge-offline';
+    setAgentState('idle', 'Disconnected', 'WebSocket connection closed. Click Start to reconnect.');
+  };
+
+  state.ws.onerror = (err) => {
+    console.error('WebSocket error:', err);
+    elements.wsBadge.textContent = 'Error';
+    elements.wsBadge.className = 'badge badge-offline';
+    showMicError('WebSocket connection error.');
+  };
+}
+
+// --- Server Message Handler ---
+function handleServerMessage(data) {
+  const { type } = data;
+
+  switch (type) {
+    case 'ready':
+      console.log('Voice Agent Ready:', data);
+      if (data.has_sarvam_key !== undefined) {
+        updateApiKeyBadge(data.has_sarvam_key);
+      }
+      break;
+
+    case 'status':
+      updateAgentStatus(data.status, data.stage, data.bytes_received);
+      break;
+
+    case 'transcript':
+      appendTranscriptBubble(data.role, data.text, data.language);
+      break;
+
+    case 'audio':
+      playAgentAudio(data.audio, data.format, data.turn_id);
+      break;
+
+    case 'interrupted':
+      console.log('Turn interrupted by server:', data.turn_id);
+      stopAudioPlayback();
+      if (!state.isSpeechActive) {
+        setAgentState('listening', 'Listening...', 'Listening to your speech.');
+        setMicStage('Recording: Listening', 'pill-neutral');
+      }
+      break;
+
+    case 'language_switched':
+      console.log(`Language switched: ${data.previous_language} -> ${data.language} (${data.reason})`);
+      const langNames = { 'mr-IN': 'Marathi (मराठी)', 'hi-IN': 'Hindi (हिंदी)', 'en-IN': 'English' };
+      const friendlyName = langNames[data.language] || data.language;
+      setMicStage(`Language: ${friendlyName}`, 'pill-success');
+      setTimeout(() => {
+        if (state.isRecording && !state.isPlayingAudio) {
+          setMicStage('Recording: Listening', 'pill-neutral');
+        }
+      }, 2500);
+      break;
+
+    case 'info':
+      console.info('Server info:', data.message);
+      setMicStage('Speech Not Clear', 'pill-warning');
+      setTimeout(() => {
+        if (state.isRecording && !state.isPlayingAudio) {
+          setMicStage('Recording: Listening', 'pill-neutral');
+        }
+      }, 2000);
+      break;
+
+    case 'error':
+      console.error('Server error:', data.message);
+      showSystemError(data.message);
+      showMicError(data.message);
+      break;
+  }
+}
+
+function updateAgentStatus(status, stage, bytesReceived) {
+  if (status === 'thinking') {
+    let desc = 'Processing speech with Sarvam AI...';
+    if (stage === 'stt') {
+      desc = 'Transcribing with Saaras v4...';
+      setMicStage(`Transcribing (${bytesReceived ? Math.round(bytesReceived/1024) + ' KB' : ''})`, 'pill-busy');
+    }
+    if (stage === 'llm') desc = 'Consulting CityLinc schedule & rules...';
+    if (stage === 'tts') desc = 'Generating voice with Bulbul v3...';
+    setAgentState('thinking', 'Thinking...', desc);
+  } else if (status === 'speaking') {
+    setAgentState('speaking', 'Speaking...', 'Agent is responding (speak to interrupt).');
+    setMicStage('Agent Speaking', 'pill-busy');
+  } else if (status === 'listening') {
+    setAgentState('listening', 'Listening...', 'Speak naturally in Marathi, Hindi, or English.');
+    setMicStage('Recording: Listening', 'pill-neutral');
+  } else if (status === 'idle') {
+    setAgentState('idle', 'Ready', 'Waiting for speech input.');
+    setMicStage('Standby', 'pill-neutral');
+  }
+}
+
+function setAgentState(mode, title, desc) {
+  elements.voiceOrb.className = `voice-orb ${mode}`;
+  elements.statusTitle.textContent = title;
+  elements.statusDesc.textContent = desc;
+
+  if (mode === 'listening') {
+    elements.orbIcon.textContent = '🎙️';
+    elements.btnInterrupt.disabled = true;
+  } else if (mode === 'thinking') {
+    elements.orbIcon.textContent = '⏳';
+    elements.btnInterrupt.disabled = false;
+  } else if (mode === 'speaking') {
+    elements.orbIcon.textContent = '🔊';
+    elements.btnInterrupt.disabled = false;
+  } else if (mode === 'interrupted') {
+    elements.orbIcon.textContent = '🛑';
+    elements.btnInterrupt.disabled = true;
+  } else {
+    elements.orbIcon.textContent = '🎙️';
+    elements.btnInterrupt.disabled = true;
+  }
+}
+
+// --- Audio Playback & Barge-in ---
+function base64ToBlob(base64, mimeType) {
+  const byteCharacters = atob(base64);
+  const byteNumbers = new Uint8Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  return new Blob([byteNumbers], { type: mimeType });
+}
+
+function playAgentAudio(base64Audio, format, turnId) {
+  if (!base64Audio) return;
+
+  state.currentTurnId = turnId;
+  state.isPlayingAudio = true;
+  state.playbackStartTime = Date.now();
+  state.bargeInConsecutiveFrames = 0;
+  state.bargeInOnsetTimestamp = 0;
+
+  // Cleanly stop any existing recording so subsequent barge-in starts fresh
+  if (state.mediaRecorder && state.mediaRecorder.state === 'recording') {
+    try { state.mediaRecorder.stop(); } catch (e) {}
+  }
+  state.isSpeechActive = false;
+  state.recordedChunks = [];
+
+  setAgentState('speaking', 'Speaking...', 'Assistant is responding (speak to interrupt).');
+  setMicStage('Agent Speaking', 'pill-busy');
+
+  let mimeType = format || 'audio/mpeg';
+  if (mimeType === 'audio/mp3' || mimeType === 'mp3') {
+    mimeType = 'audio/mpeg';
+  } else if (mimeType === 'wav') {
+    mimeType = 'audio/wav';
+  }
+
+  if (state.currentAudioUrl) {
+    URL.revokeObjectURL(state.currentAudioUrl);
+    state.currentAudioUrl = null;
+  }
+
+  try {
+    const audioBlob = base64ToBlob(base64Audio, mimeType);
+    state.currentAudioUrl = URL.createObjectURL(audioBlob);
+    elements.audioPlayer.src = state.currentAudioUrl;
+
+    const playPromise = elements.audioPlayer.play();
+    if (playPromise !== undefined) {
+      playPromise.catch(err => {
+        if (err.name === 'AbortError') return;
+        console.warn('Audio playback error:', err);
+        state.isPlayingAudio = false;
+        setAgentState('listening', 'Listening...', 'Ready for your next question.');
+      });
+    }
+  } catch (err) {
+    console.error('Failed to decode or play audio blob:', err);
+    state.isPlayingAudio = false;
+    setAgentState('listening', 'Listening...', 'Ready for your next question.');
+  }
+}
+
+function onAudioPlaybackEnded() {
+  if (state.isPlayingAudio) {
+    state.isPlayingAudio = false;
+    state.bargeInConsecutiveFrames = 0;
+    state.lastVoiceTime = Date.now();
+    state.recordedChunks = [];
+
+    if (state.isRecording) {
+      setAgentState('listening', 'Listening...', 'Speak now in Marathi, Hindi, or English.');
+      setMicStage('Recording: Listening', 'pill-neutral');
+    } else {
+      setAgentState('idle', 'Ready', 'Click Start Conversation to talk again.');
+      setMicStage('Standby', 'pill-neutral');
+    }
+  }
+}
+
+function stopAudioPlayback() {
+  state.isPlayingAudio = false;
+  state.bargeInConsecutiveFrames = 0;
+
+  try {
+    elements.audioPlayer.pause();
+    elements.audioPlayer.currentTime = 0;
+  } catch (e) {}
+
+  if (state.currentAudioUrl) {
+    URL.revokeObjectURL(state.currentAudioUrl);
+    state.currentAudioUrl = null;
+  }
+}
+
+function triggerBargeIn(isAcoustic = false) {
+  const onsetTime = state.bargeInOnsetTimestamp || performance.now();
+  const turnToInterrupt = state.currentTurnId;
+
+  // 1. Instantly stop audio playback (< 5ms)
+  stopAudioPlayback();
+
+  const latencyMs = Math.round((performance.now() - onsetTime) * 10) / 10;
+  state.lastMeasuredInterruptionLatencyMs = latencyMs;
+  console.log(`[Barge-In] Turn ${turnToInterrupt} interrupted (acoustic=${isAcoustic}, latency=${latencyMs}ms)`);
+
+  // 2. Instantly notify backend over WebSocket
+  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    state.ws.send(JSON.stringify({
+      type: 'interrupt',
+      turn_id: turnToInterrupt
+    }));
+  }
+
+  // 3. Handle speech recording based on trigger type:
+  if (isAcoustic) {
+    // Acoustic speech detected: keep capturing user's interrupting utterance
+    state.isSpeechActive = true;
+    state.speechStartTime = Date.now();
+    state.lastVoiceTime = Date.now();
+    state.recordedChunks = [];
+
+    setAgentState('listening', 'Listening...', 'Interrupted — listening to your question...');
+    setMicStage('Recording: Speaking...', 'pill-active');
+
+    // Immediately start MediaRecorder to capture user speech
+    if (state.mediaRecorder && state.mediaRecorder.state !== 'recording') {
+      try {
+        state.mediaRecorder.start(100);
+      } catch (err) {
+        console.warn('Failed to start mediaRecorder on acoustic barge-in:', err);
+      }
+    }
+  } else {
+    // Manual button click
+    state.recordedChunks = [];
+    state.isSpeechActive = false;
+    state.lastVoiceTime = Date.now();
+    setAgentState('interrupted', 'Interrupted', 'Stopping playback and listening...');
+    setMicStage('Interrupted', 'pill-danger');
+
+    setTimeout(() => {
+      if (state.isRecording && !state.isPlayingAudio && !state.isSpeechActive) {
+        setAgentState('listening', 'Listening...', 'Speak now.');
+        setMicStage('Recording: Listening', 'pill-neutral');
+      }
+    }, 200);
+  }
+}
+
+// --- Microphone & Web Audio Pipeline ---
+async function startConversation() {
+  clearMicError();
+  setMicStage('Permission: Requesting...', 'pill-busy');
+
+  try {
+    // 1. Request microphone with verified constraint fallbacks
+    const constraints = {
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+        channelCount: 1,
+        sampleRate: { ideal: 16000 }
+      }
+    };
+
+    const stream = await navigator.mediaDevices.getUserMedia(constraints);
+    state.mediaStream = stream;
+
+    // 2. Validate audio track
+    const tracks = stream.getAudioTracks();
+    if (!tracks || tracks.length === 0) {
+      throw new Error('MediaStream contains no audio tracks.');
+    }
+
+    state.audioTrack = tracks[0];
+    const trackLabel = state.audioTrack.label || 'Default Microphone';
+    console.log(`Audio track active: ${trackLabel} (enabled: ${state.audioTrack.enabled})`);
+
+    if (elements.micTrackName) {
+      elements.micTrackName.textContent = trackLabel.length > 28 ? trackLabel.slice(0, 26) + '...' : trackLabel;
+    }
+
+    state.audioTrack.onended = () => {
+      console.warn('Microphone track disconnected or ended.');
+      showMicError('Microphone disconnected.');
+      setMicStage('Track Disconnected', 'pill-danger');
+    };
+
+    state.audioTrack.onmute = () => {
+      console.warn('Microphone track muted by hardware/OS.');
+      setMicStage('Hardware Muted', 'pill-warning');
+    };
+
+    state.audioTrack.onunmute = () => {
+      setMicStage('Recording: Listening', 'pill-neutral');
+    };
+
+    elements.micBadge.textContent = 'Mic: Active';
+    elements.micBadge.className = 'badge badge-online';
+    setMicStage('Permission: Granted', 'pill-active');
+
+    // 3. Connect WebSocket if not open
+    if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+      initWebSocket();
+    }
+
+    // 4. Initialize Web Audio API Analyser for live time-domain RMS
+    setupAudioContext(stream);
+
+    // 5. Initialize MediaRecorder instance
+    initMediaRecorder();
+
+    // 6. Update UI state
+    state.isRecording = true;
+    state.isSpeechActive = false;
+    elements.btnStart.disabled = true;
+    elements.btnStop.disabled = false;
+    elements.btnTalkManual.disabled = false;
+    setAgentState('listening', 'Listening...', 'Listening to your speech. Speak now.');
+
+    setTimeout(() => {
+      setMicStage('Recording: Listening', 'pill-neutral');
+    }, 800);
+
+  } catch (err) {
+    console.error('Microphone initialization error:', err);
+    showMicError(`${err.name}: ${err.message || 'Permission denied'}`);
+    setMicStage('Permission: Denied', 'pill-danger');
+    elements.micBadge.textContent = 'Mic: Denied';
+    elements.micBadge.className = 'badge badge-offline';
+    if (elements.micTrackName) {
+      elements.micTrackName.textContent = 'Access Failed';
+    }
+  }
+}
+
+function stopConversation() {
+  if (state.isManualRecording) {
+    toggleManualRecording();
+  }
+
+  // Stop MediaRecorder
+  if (state.mediaRecorder && state.mediaRecorder.state !== 'inactive') {
+    try {
+      state.mediaRecorder.stop();
+    } catch (e) {}
+  }
+
+  // Stop audio tracks
+  if (state.mediaStream) {
+    state.mediaStream.getTracks().forEach(track => track.stop());
+    state.mediaStream = null;
+    state.audioTrack = null;
+  }
+
+  // Close AudioContext
+  if (state.audioContext && state.audioContext.state !== 'closed') {
+    state.audioContext.close();
+    state.audioContext = null;
+  }
+
+  stopAudioPlayback();
+
+  // Close WebSocket
+  if (state.ws) {
+    state.ws.close();
+    state.ws = null;
+  }
+
+  state.isRecording = false;
+  state.isSpeechActive = false;
+  elements.micBadge.textContent = 'Mic: Off';
+  elements.micBadge.className = 'badge badge-neutral';
+
+  elements.btnStart.disabled = false;
+  elements.btnStop.disabled = true;
+  elements.btnTalkManual.disabled = true;
+  elements.btnInterrupt.disabled = true;
+
+  if (elements.micTrackName) elements.micTrackName.textContent = 'Off';
+  if (elements.micVuBar) elements.micVuBar.style.width = '0%';
+  if (elements.micVuText) elements.micVuText.textContent = '0%';
+  setMicStage('Standby', 'pill-neutral');
+
+  setAgentState('idle', 'Ended', 'Conversation ended. Click Start to begin again.');
+  drawIdleVisualizer();
+}
+
+function setupAudioContext(stream) {
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  state.audioContext = new AudioContext();
+
+  const source = state.audioContext.createMediaStreamSource(stream);
+  state.analyser = state.audioContext.createAnalyser();
+  state.analyser.fftSize = 512;
+  state.analyser.smoothingTimeConstant = 0.2;
+
+  source.connect(state.analyser);
+
+  state.timeDomainData = new Uint8Array(state.analyser.fftSize);
+  state.frequencyData = new Uint8Array(state.analyser.frequencyBinCount);
+
+  renderVisualizer();
+}
+
+function initMediaRecorder() {
+  if (!state.mediaStream) return;
+
+  // Determine supported mime type
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/ogg;codecs=opus',
+    'audio/mp4'
+  ];
+  let mimeType = '';
+  for (const c of candidates) {
+    if (MediaRecorder.isTypeSupported(c)) {
+      mimeType = c;
+      break;
+    }
+  }
+
+  console.log(`MediaRecorder mimeType selected: ${mimeType || 'browser default'}`);
+  state.mediaRecorder = mimeType ? new MediaRecorder(state.mediaStream, { mimeType }) : new MediaRecorder(state.mediaStream);
+  state.recordedChunks = [];
+
+  state.mediaRecorder.ondataavailable = (e) => {
+    if (e.data && e.data.size > 0) {
+      state.recordedChunks.push(e.data);
+    }
+  };
+
+  state.mediaRecorder.onstop = () => {
+    handleUtteranceRecorded();
+  };
+
+  state.mediaRecorder.onerror = (e) => {
+    console.error('MediaRecorder error:', e);
+    showMicError(`Recorder error: ${e.error || 'Unknown'}`);
+  };
+}
+
+// --- Utterance Processing and WebSocket Transmission ---
+function handleUtteranceRecorded() {
+  if (state.recordedChunks.length === 0) {
+    return;
+  }
+
+  const mime = (state.mediaRecorder && state.mediaRecorder.mimeType) || 'audio/webm';
+  const audioBlob = new Blob(state.recordedChunks, { type: mime });
+  state.recordedChunks = [];
+
+  const durationSec = Math.max(0.4, (Date.now() - state.speechStartTime) / 1000);
+  const sizeKB = (audioBlob.size / 1024).toFixed(1);
+
+  if (elements.micCapturedInfo) {
+    elements.micCapturedInfo.textContent = `${sizeKB} KB (${durationSec.toFixed(1)}s)`;
+  }
+
+  console.log(`Utterance captured: ${audioBlob.size} bytes (${durationSec.toFixed(1)}s) [mime: ${mime}]`);
+
+  // Discard empty or sub-kilobyte bursts
+  if (audioBlob.size < 1200) {
+    console.log('Audio blob too small, likely noise burst. Discarding.');
+    setMicStage('Recording: Listening', 'pill-neutral');
+    return;
+  }
+
+  // Send through WebSocket pipeline
+  setMicStage('Uploading Audio...', 'pill-busy');
+  sendAudioBlob(audioBlob, mime);
+}
+
+function sendAudioBlob(blob, mimeType) {
+  if (!state.ws || state.ws.readyState !== WebSocket.OPEN) {
+    console.warn('Cannot send audio: WebSocket is not open.');
+    showMicError('WebSocket disconnected during audio upload.');
+    return;
+  }
+
+  // Normalize Content-Type by stripping codec parameters (e.g. 'audio/webm;codecs=opus' -> 'audio/webm')
+  const cleanMime = (mimeType || 'audio/webm').split(';')[0].trim().toLowerCase() || 'audio/webm';
+
+  setMicStage('Transcribing with Saaras v4...', 'pill-busy');
+  setAgentState('thinking', 'Thinking...', 'Transcribing with Saaras v4...');
+
+  const reader = new FileReader();
+  reader.onloadend = () => {
+    const base64Audio = reader.result.split(',')[1];
+    state.ws.send(JSON.stringify({
+      type: 'audio',
+      data: base64Audio,
+      format: cleanMime,
+      language: state.selectedLanguage
+    }));
+    console.log(`Sent audio payload over WebSocket: ${base64Audio.length} base64 chars [format: ${cleanMime}]`);
+  };
+  reader.onerror = (err) => {
+    console.error('FileReader error encoding audio blob:', err);
+    showMicError('Failed to encode audio for upload.');
+  };
+  reader.readAsDataURL(blob);
+}
+
+// --- Manual Talk Toggle ---
+function toggleManualRecording() {
+  if (!state.isRecording) return;
+
+  if (!state.isManualRecording) {
+    // Start Manual Recording
+    state.isManualRecording = true;
+    state.isSpeechActive = true;
+    state.speechStartTime = Date.now();
+    elements.btnTalkManual.innerHTML = '<span class="btn-icon">⏹</span> Done Speaking';
+    elements.btnTalkManual.className = 'btn btn-action recording';
+    setMicStage('Manual Capture Active', 'pill-active');
+
+    if (state.mediaRecorder && state.mediaRecorder.state !== 'recording') {
+      state.recordedChunks = [];
+      state.mediaRecorder.start(100);
+    }
+  } else {
+    // Finish Manual Recording
+    state.isManualRecording = false;
+    state.isSpeechActive = false;
+    elements.btnTalkManual.innerHTML = '<span class="btn-icon">🎙️</span> Push to Speak';
+    elements.btnTalkManual.className = 'btn btn-action';
+    setMicStage('Audio Captured', 'pill-busy');
+
+    if (state.mediaRecorder && state.mediaRecorder.state === 'recording') {
+      state.mediaRecorder.stop();
+    }
+  }
+}
+
+// --- Real-time Visualizer and Time-Domain RMS VAD Loop ---
+function renderVisualizer() {
+  if (!state.analyser) return;
+
+  requestAnimationFrame(renderVisualizer);
+
+  // 1. Compute physical sound energy using Time-Domain RMS
+  state.analyser.getByteTimeDomainData(state.timeDomainData);
+  let sumSq = 0;
+  for (let i = 0; i < state.timeDomainData.length; i++) {
+    const norm = (state.timeDomainData[i] - 128) / 128.0;
+    sumSq += norm * norm;
+  }
+  const rms = Math.sqrt(sumSq / state.timeDomainData.length);
+  state.rmsVolume = rms;
+
+  // Update physical VU volume meter (0% - 100%)
+  const vuPercent = Math.min(100, Math.round(rms * 450));
+  if (elements.micVuBar) elements.micVuBar.style.width = `${vuPercent}%`;
+  if (elements.micVuText) elements.micVuText.textContent = `${vuPercent}%`;
+
+  // 2. Draw canvas frequency bars
+  state.analyser.getByteFrequencyData(state.frequencyData);
+  canvasCtx.clearRect(0, 0, elements.visualizerCanvas.width, elements.visualizerCanvas.height);
+  const barWidth = (elements.visualizerCanvas.width / state.analyser.frequencyBinCount) * 2.2;
+  let x = 0;
+
+  for (let i = 0; i < state.analyser.frequencyBinCount; i++) {
+    const barHeight = (state.frequencyData[i] / 255) * (elements.visualizerCanvas.height - 4);
+    let fillColor = '#3b82f6';
+    if (state.isPlayingAudio) {
+      fillColor = '#8b5cf6';
+    } else if (state.isSpeechActive || rms > state.voiceThreshold) {
+      fillColor = '#10b981';
+    }
+    canvasCtx.fillStyle = fillColor;
+    canvasCtx.fillRect(x, elements.visualizerCanvas.height - barHeight, barWidth, barHeight);
+    x += barWidth + 1;
+  }
+
+  const now = Date.now();
+
+  // Adapt ambient noise floor during quiet non-playback periods
+  if (!state.isSpeechActive && !state.isPlayingAudio) {
+    state.ambientNoise = (state.ambientNoise * 0.96) + (rms * 0.04);
+  }
+
+  // 3. Audio state machine: Assistant Playback & Real-Time Full-Duplex Barge-In
+  if (state.isPlayingAudio) {
+    const timeSincePlayback = now - state.playbackStartTime;
+    // Barge-in threshold: safely above AEC residual echo (<0.028), catches normal speech (0.06-0.18) & soft speech (0.040-0.055)
+    const effectiveBargeThreshold = Math.max(state.bargeInThreshold, state.ambientNoise * 2.2);
+
+    if (rms > effectiveBargeThreshold) {
+      // Record speech onset timestamp at first frame
+      if (state.bargeInConsecutiveFrames === 0) {
+        state.bargeInOnsetTimestamp = performance.now();
+      }
+
+      const isEarlyPlayback = (timeSincePlayback < state.bargeInGracePeriodMs);
+      const isStrongSpeech = (rms >= effectiveBargeThreshold * 1.35); // e.g. >= 0.062
+
+      // Allow interruption if past grace period (160ms) OR if user speech is loud/strong
+      if (!isEarlyPlayback || isStrongSpeech) {
+        state.bargeInConsecutiveFrames++;
+        if (state.bargeInConsecutiveFrames >= state.bargeInRequiredFrames || (isStrongSpeech && state.bargeInConsecutiveFrames >= 1)) {
+          state.bargeInConsecutiveFrames = 0;
+          triggerBargeIn(true);
+          return;
+        }
+      }
+    } else {
+      state.bargeInConsecutiveFrames = Math.max(0, state.bargeInConsecutiveFrames - 1);
+      if (state.bargeInConsecutiveFrames === 0) {
+        state.bargeInOnsetTimestamp = 0;
+      }
+    }
+    return;
+  }
+
+  // If in manual recording mode, auto-VAD silence cutoff is disabled
+  if (state.isManualRecording) {
+    return;
+  }
+
+  // 4. Auto-VAD Utterance Detection
+  if (!state.isSpeechActive) {
+    // User is currently silent
+    if (rms > state.voiceThreshold) {
+      // Speech onset detected!
+      state.isSpeechActive = true;
+      state.speechStartTime = now;
+      state.lastVoiceTime = now;
+      setMicStage('Recording: Speaking...', 'pill-active');
+
+      if (state.mediaRecorder && state.mediaRecorder.state !== 'recording') {
+        state.recordedChunks = [];
+        state.mediaRecorder.start(100);
+      }
+    }
+  } else {
+    // User is actively in an utterance
+    if (rms > state.voiceThreshold) {
+      state.lastVoiceTime = now;
+    }
+
+    const silenceDuration = now - state.lastVoiceTime;
+    const utteranceDuration = now - state.speechStartTime;
+
+    // Finalize utterance when pause threshold is met OR maximum length exceeded
+    if ((silenceDuration > state.silenceThresholdMs && utteranceDuration > state.minUtteranceMs) || 
+        utteranceDuration > state.maxUtteranceMs) {
+      state.isSpeechActive = false;
+      setMicStage('Audio Captured', 'pill-busy');
+
+      if (state.mediaRecorder && state.mediaRecorder.state === 'recording') {
+        state.mediaRecorder.stop();
+      }
+    }
+  }
+}
+
+function drawIdleVisualizer() {
+  canvasCtx.clearRect(0, 0, elements.visualizerCanvas.width, elements.visualizerCanvas.height);
+  canvasCtx.fillStyle = '#1e293b';
+  canvasCtx.fillRect(0, elements.visualizerCanvas.height / 2 - 1, elements.visualizerCanvas.width, 2);
+}
+
+// --- Separate Text Input Submission Path ---
+function sendTextMessage() {
+  const text = elements.textInput.value.trim();
+  if (!text) return;
+
+  elements.textInput.value = '';
+
+  if (state.ws && state.ws.readyState === WebSocket.OPEN) {
+    state.ws.send(JSON.stringify({
+      type: 'text',
+      text: text,
+      language: state.selectedLanguage
+    }));
+  } else {
+    // REST fallback
+    fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: text,
+        language: state.selectedLanguage
+      })
+    })
+    .then(r => r.json())
+    .then(data => {
+      appendTranscriptBubble('user', text, data.language);
+      appendTranscriptBubble('assistant', data.response, data.language);
+    })
+    .catch(err => {
+      console.error('Chat error:', err);
+      showSystemError('Failed to send text message.');
+    });
+  }
+}
+
+// --- Transcript UI ---
+function appendTranscriptBubble(role, text, language) {
+  const welcome = document.querySelector('.welcome-bubble');
+  if (welcome) welcome.remove();
+
+  const bubble = document.createElement('div');
+  bubble.className = `msg-bubble ${role === 'user' ? 'msg-user' : 'msg-assistant'}`;
+
+  const meta = document.createElement('div');
+  meta.className = 'msg-meta';
+
+  const sender = document.createElement('span');
+  sender.className = 'msg-sender';
+  sender.textContent = role === 'user' ? '👤 You' : '🚌 CityLinc Assistant';
+
+  const langTag = document.createElement('span');
+  langTag.className = 'msg-lang';
+  langTag.textContent = language || 'mr-IN';
+
+  meta.appendChild(sender);
+  meta.appendChild(langTag);
+
+  const content = document.createElement('div');
+  content.className = 'msg-content';
+  content.textContent = text;
+
+  bubble.appendChild(meta);
+  bubble.appendChild(content);
+
+  elements.transcriptFeed.appendChild(bubble);
+  elements.transcriptFeed.scrollTop = elements.transcriptFeed.scrollHeight;
+}
+
+function showSystemError(msg) {
+  const bubble = document.createElement('div');
+  bubble.className = 'msg-bubble msg-assistant';
+  bubble.style.borderColor = '#ef4444';
+  bubble.innerHTML = `<span style="color:#ef4444; font-weight:600;">⚠️ Error:</span> ${msg}`;
+  elements.transcriptFeed.appendChild(bubble);
+  elements.transcriptFeed.scrollTop = elements.transcriptFeed.scrollHeight;
+}
+
+// Expose state and helper functions to window for browser verification
+window.citylincVoiceState = state;
+window.citylincElements = elements;
+window.triggerBargeIn = triggerBargeIn;
+window.playAgentAudio = playAgentAudio;
+window.stopAudioPlayback = stopAudioPlayback;
+window.sendAudioBlob = sendAudioBlob;

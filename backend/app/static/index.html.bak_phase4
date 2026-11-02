@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CityLinc Nashik — Multilingual Voice Agent</title>
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Noto+Sans+Devanagari:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Leaflet & MarkerCluster CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="app-header">
+      <div class="logo-group">
+        <div class="logo-icon">🚌</div>
+        <div>
+          <h1>CityLinc AI Voice Agent</h1>
+          <p class="subtitle">सिटीलिंक नाशिक बस सहाय्यक • Marathi • Hindi • English</p>
+        </div>
+      </div>
+      <!-- Dashboard View Switcher Tabs -->
+      <nav class="view-switcher" role="tablist" aria-label="Dashboard views">
+        <button id="tab-voice" class="view-tab active" data-view="voice">🎙️ Voice Assistant</button>
+        <button id="tab-dual" class="view-tab" data-view="dual">🧭 Dual View</button>
+        <button id="tab-map" class="view-tab" data-view="map">🗺️ Nashik Map</button>
+      </nav>
+      <div class="header-badges">
+        <div id="ws-badge" class="badge badge-offline">Connecting...</div>
+        <div id="mic-badge" class="badge badge-neutral">Mic: Off</div>
+      </div>
+    </header>
+
+    <!-- Main Workspace -->
+    <main class="main-content">
+      <!-- Left Column: Voice Orb & Visualizer -->
+      <section class="voice-card">
+        <div class="voice-orb-wrapper">
+          <div id="voice-orb" class="voice-orb idle">
+            <div class="orb-core">
+              <span id="orb-icon" class="orb-icon">🎙️</span>
+            </div>
+            <div class="pulse-ring ring-1"></div>
+            <div class="pulse-ring ring-2"></div>
+            <div class="pulse-ring ring-3"></div>
+          </div>
+        </div>
+
+        <div class="agent-status-container">
+          <h2 id="agent-status-title">Ready to Start</h2>
+          <p id="agent-status-desc">Click "Start Conversation" to speak in Marathi, Hindi, or English.</p>
+        </div>
+
+        <!-- Audio Visualizer Canvas -->
+        <canvas id="visualizer-canvas" width="320" height="48"></canvas>
+
+        <!-- Voice Action Buttons -->
+        <div class="voice-controls">
+          <button id="btn-start" class="btn btn-primary">
+            <span class="btn-icon">▶</span> Start Conversation
+          </button>
+          <button id="btn-talk-manual" class="btn btn-action" disabled title="Click to speak manually without waiting for VAD">
+            <span class="btn-icon">🎙️</span> Push to Speak
+          </button>
+          <button id="btn-stop" class="btn btn-danger" disabled>
+            <span class="btn-icon">⏹</span> End
+          </button>
+          <button id="btn-interrupt" class="btn btn-warning" disabled title="Interrupt agent speech (barge-in)">
+            <span class="btn-icon">⚡</span> Interrupt
+          </button>
+        </div>
+
+        <!-- Microphone Diagnostics Card -->
+        <div class="mic-diagnostics-card">
+          <div class="mic-diag-header">
+            <span class="mic-diag-title">🎙️ Mic Pipeline Diagnostics</span>
+            <span id="mic-stage-pill" class="pill pill-neutral">Standby</span>
+          </div>
+          <div class="mic-diag-body">
+            <div class="diag-row">
+              <span class="diag-label">Audio Track:</span>
+              <span id="mic-track-name" class="diag-val">Not initialized</span>
+            </div>
+            <div class="diag-row">
+              <span class="diag-label">Voice Level:</span>
+              <div class="meter-wrapper">
+                <div id="mic-vu-bar" class="meter-fill" style="width: 0%;"></div>
+              </div>
+              <span id="mic-vu-text" class="diag-val" style="width: 45px; text-align: right;">0%</span>
+            </div>
+            <div class="diag-row">
+              <span class="diag-label">Audio Captured:</span>
+              <span id="mic-captured-info" class="diag-val">0 KB (0.0s)</span>
+            </div>
+          </div>
+          <div id="mic-error-box" class="mic-error-box" style="display: none;"></div>
+        </div>
+
+        <!-- Language Switcher & Barge-in Info -->
+        <div class="settings-strip">
+          <div class="setting-item">
+            <label for="lang-select">Language:</label>
+            <select id="lang-select" class="form-select">
+              <option value="auto" selected>Auto-Detect (स्वयंचलित)</option>
+              <option value="mr-IN">मराठी (mr-IN)</option>
+              <option value="hi-IN">हिंदी (hi-IN)</option>
+              <option value="en-IN">English (en-IN)</option>
+            </select>
+          </div>
+          <div class="barge-in-badge" title="Barge-in allows you to speak over the assistant at any time to interrupt it">
+            <span class="dot"></span> Barge-in Active
+          </div>
+        </div>
+
+        <!-- System Diagnostics / Config Status -->
+        <div class="diagnostics-card">
+          <div class="diag-header">
+            <span>⚙️ Pipeline Specs</span>
+            <span id="api-key-indicator" class="pill pill-warning">Checking...</span>
+          </div>
+          <div class="diag-grid">
+            <div><strong>STT:</strong> Sarvam <span class="badge-text">Saaras v4</span></div>
+            <div><strong>TTS:</strong> Sarvam <span class="badge-text">Bulbul v3</span></div>
+            <div><strong>Knowledge:</strong> 315 Routes (3,547 Trips)</div>
+            <div><strong>Audio:</strong> Real-time Stream</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right Column: Conversation Transcript & Chat -->
+      <section class="transcript-card">
+        <div class="transcript-header">
+          <div class="header-title-row">
+            <h3>Live Conversation Transcript</h3>
+            <button id="btn-clear-chat" class="btn-subtle" title="Clear chat history">Clear History</button>
+          </div>
+          <!-- Quick suggestions -->
+          <div class="quick-prompts">
+            <span class="prompt-chip" data-text="विद्यार्थी पास ची माहिती द्या">विद्यार्थी पास?</span>
+            <span class="prompt-chip" data-text="बस 101 चा वेळ काय आहे?">बस १०१ वेळ?</span>
+            <span class="prompt-chip" data-text="ओपन पास चे दर काय आहेत?">पासचे दर?</span>
+            <span class="prompt-chip" data-text="Tapovan to Gangapur bus route">Route 101 stops?</span>
+          </div>
+        </div>
+
+        <!-- Transcript Feed -->
+        <div id="transcript-feed" class="transcript-feed">
+          <div class="welcome-bubble">
+            <div class="welcome-icon">👋</div>
+            <div class="welcome-text">
+              <h4>Welcome to CityLinc Voice Assistant!</h4>
+              <p>Speak naturally in <strong>Marathi</strong>, <strong>Hindi</strong>, or <strong>English</strong>. You can ask about bus routes, departure schedules, stops, and pass rates.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Text Input Fallback Bar -->
+        <div class="chat-input-bar">
+          <input type="text" id="text-input" placeholder="Type a message or question in any language..." />
+          <button id="btn-send-text" class="btn btn-send" title="Send text message">
+            <span>➤</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Center / Right Column: Nashik City Interactive Map Section -->
+      <section id="map-section" class="map-card" style="display: none;">
+        <div class="map-header">
+          <div class="map-toolbar">
+            <div class="map-search-box">
+              <input type="text" id="map-search-input" placeholder="Search stops, hospitals, or Route 101..." />
+              <button id="btn-map-search" class="btn-subtle" title="Search map">🔍</button>
+            </div>
+            <div class="map-route-select-wrapper">
+              <label for="map-route-select">Route:</label>
+              <select id="map-route-select" class="form-select">
+                <option value="">-- All Stops (Overview) --</option>
+              </select>
+            </div>
+            <div class="map-layer-toggles">
+              <button id="toggle-layer-stops" class="layer-pill active" data-layer="stops">🚏 Stops (1,187)</button>
+              <button id="toggle-layer-hospitals" class="layer-pill active" data-layer="hospitals">🏥 Hospitals (31)</button>
+              <button id="toggle-layer-landmarks" class="layer-pill" data-layer="landmarks">🏛️ Landmarks</button>
+            </div>
+          </div>
+          <div class="map-status-strip">
+            <span id="map-active-route-badge" class="badge badge-route" style="display: none;"></span>
+            <span id="map-stop-count-badge" class="badge badge-neutral">1,187 Stops Loaded</span>
+            <button id="btn-reset-map-view" class="btn-subtle" title="Reset map to Nashik City view">Reset View</button>
+          </div>
+        </div>
+
+        <!-- Interactive Map Container -->
+        <div class="map-container-wrapper">
+          <div id="citylinc-map"></div>
+
+          <!-- Slide-out Stop Detail Panel -->
+          <div id="stop-detail-panel" class="stop-detail-panel" style="display: none;">
+            <div class="panel-header">
+              <h4 id="panel-stop-name">Station Name</h4>
+              <button id="btn-close-panel" class="btn-close" title="Close panel">&times;</button>
+            </div>
+            <div class="panel-body">
+              <div class="panel-tag-row">
+                <span id="panel-platform-badge" class="pill pill-neutral">Platform Up</span>
+                <span id="panel-category-badge" class="pill pill-busy">General Stop</span>
+              </div>
+              <div class="panel-info-row">
+                <span class="info-label">Station ID:</span>
+                <span id="panel-station-id" class="info-val">1001</span>
+              </div>
+              <div class="panel-info-row">
+                <span class="info-label">GPS Coordinates:</span>
+                <span id="panel-coordinates" class="info-val">20.0078, 73.8142</span>
+              </div>
+              <div class="panel-routes-section">
+                <span class="info-label">Passing Bus Routes:</span>
+                <div id="panel-routes-list" class="route-pills-container"></div>
+              </div>
+              <div class="panel-actions">
+                <button id="btn-ask-about-stop" class="btn btn-action">
+                  <span>🎙️ Ask Assistant About This Stop</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <p>CityLinc Transit AI • Powered by Sarvam AI (Saaras v4 STT & Bulbul v3 TTS) & FastAPI • Nashik Transit Map</p>
+    </footer>
+  </div>
+
+  <!-- Audio element for TTS playback -->
+  <audio id="tts-audio-player" style="display:none;"></audio>
+
+  <!-- Leaflet & MarkerCluster JS Scripts -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+  <script src="/static/app.js"></script>
+</body>
+</html>
+

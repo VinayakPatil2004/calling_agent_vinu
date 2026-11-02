@@ -1,0 +1,232 @@
+# CityLinc P0.2 — Documentation Remediation (Strict Documentation-Only)
+
+**Workspace:** `D:\calling agent`  
+**Project:** CityLinc AI Calling Agent  
+**Execution Mode:** STRICT DOCUMENTATION-ONLY  
+**Phase 2:** STRICTLY LOCKED
+
+## 1. Objective
+
+Perform controlled documentation remediation using the independently verified evidence from the latest report:
+
+`Pasted text(20261031-184351).txt`
+
+Update the five existing specification documents for consistency, accuracy, source traceability, and schema documentation correctness.
+
+## 2. Strict Scope
+
+The only permitted modifications are to these five existing documentation files:
+
+1. `docs/architecture/SOURCE_TO_TARGET_MAPPING.md`
+2. `docs/database/PROPOSED_POSTGRESQL_SCHEMA.md`
+3. `data/reports/DATA_PROFILING_REPORT.md`
+4. `data/reports/DATA_QUALITY_ISSUES.md`
+5. `data/reports/DATA_CLEANING_PLAN.md`
+
+Do not create new files. Do not modify raw source files.
+
+## 3. Verified Evidence to Incorporate
+
+Use the independently verified findings:
+
+- Trip status: `0 = 2085`, `2 = 1237`, `6 = 218`, `9 = 7`. Meanings remain unconfirmed.
+- Consecutive duplicate stops: 63 pairs across route IDs 6710, 6908, and 6866.
+- Unique repeated station IDs: 66. Do not call this 66 duplicate pairs.
+- Maximum route distance: 45.4 km, route ID 5989, public route 245, routepartid 52743.
+- Companion concession: 50% for companion of a blind/differently abled passenger with 65% or above disability.
+- Above-62-km fare matrix: 2022/2023 municipal base fare cells are blank; Government maximum states ₹30 per additional 10 km or part thereof.
+- Student pass: 30 days = 50%; 90 days = 66.66% in PDF and 66.60% in JSON.
+- Fixed-route pass: 30 days = 20 days fare; 90 days = 50 days fare.
+- No evidence for a 180-day student pass or 10-day student fare multiplier.
+
+Preserve source terminology and distinguish verified facts from unresolved operational assumptions.
+
+## 4. Required Documentation Corrections
+
+- Correct obsolete paths and source references.
+- Include both fare PDFs in source inventories.
+- Align `eta` / `source_eta` terminology.
+- Keep duration and next-day arrival fields explicitly provisional until operator confirmation.
+- Preserve routepart-level coordinate lineage.
+- Align `raw_arrival_text` and `raw_arrival_at_destination_text`.
+- Document `totaldistance` mapping and its kilometre unit.
+- Clarify `source_timetable_rno` and `source_timetable_routeno`.
+- Correct the SQL NULL/UNKNOWN bypass vulnerability in the proposed `chk_fare_verification` constraint.
+- Move future-scope `trip_stop_times` out of active core DDL, or clearly mark it as future scope without treating it as implemented.
+- Avoid unique departure constraints that reject legitimate repeated departure occurrences.
+- Correct staging-schema inconsistencies.
+- Add missing fare schema requirements and source-lineage requirements to documentation.
+- Ensure findings DQI-001 onward are traceable and consistently referenced.
+
+## 5. SQL Constraint Review
+
+For `chk_fare_verification`, inspect the existing proposed constraint and document a safe correction that explicitly prevents NULL/UNKNOWN from passing validation.
+
+Do not execute SQL. Do not create database objects. Do not claim that a proposed DDL correction has been deployed.
+
+## 6. Mandatory Safety Restrictions
+
+STRICTLY PROHIBITED:
+
+- Application code modifications.
+- Python scripts or cleaning routines.
+- SQL execution.
+- Database connections.
+- Migrations.
+- Table creation.
+- Raw data modification.
+- File creation, deletion, movement, or renaming.
+- Phase 2 implementation.
+- Changes outside the five approved documentation files.
+
+If a required correction cannot be supported by available evidence, document it as unresolved instead of guessing.
+
+## 7. Execution Workflow
+
+1. Inspect all five existing documents and the latest verification report.
+2. Record their initial file hashes.
+3. Prepare a correction plan.
+4. Modify only the five approved documentation files.
+5. Review every modified section against primary-source evidence.
+6. Check cross-document naming, paths, counts, and terminology.
+7. Verify the SQL NULL/UNKNOWN issue is correctly documented.
+8. Calculate final file hashes and compare the changed-file list.
+9. Produce a concise remediation report with:
+   - Files modified
+   - Sections corrected
+   - Evidence incorporated
+   - Unresolved operator decisions
+   - Cross-document consistency results
+   - Final hashes
+   - Safety confirmation
+
+## 8. Final Gate
+
+The final report must explicitly state:
+
+- Documentation remediation status.
+- Whether all five documents passed consistency review.
+- Any remaining unresolved findings.
+- Whether any unauthorized file was changed.
+- Whether SQL or database operations occurred.
+
+**Phase 2 MUST remain STRICTLY LOCKED.**
+
+Do not start Phase 2, implementation, database construction, or migration work. Documentation completion is not implementation authorization.
+
+**Begin with the read-only inspection and correction plan. Do not modify files until the correction plan is presented for explicit approval.**# CityLinc AI Calling Agent — Source-to-Target Data Mapping Specification
+
+**Document ID:** `SOURCE_TO_TARGET_MAPPING.md`  
+**Phase:** P0.2 — Final Database Design Specification (Post-Review Revision 2)  
+**Status:** DRAFT / APPROVED FOR DESIGN  
+**Classification:** Transit Architecture Data Lineage Specification
+
+---
+
+## 1. Lineage Architecture & Review Revisions
+
+This specification traces field-level lineage between the six raw datasets (`data/raw/`) and the PostgreSQL relational schema, incorporating all corrections from the Principal Database Architect review:
+1. **Preservation of All 12,909 Stops:** `route_stops` retains 100% of source records; consecutive duplicates are marked with a validation flag without default suppression.
+2. **Flexible Fare Verification:** `raw_stationfare` preserves source `'0'`; unverified fares remain `NULL` under `fare_verification_status = 'UNVERIFIED'`; verified zero fares (`'VERIFIED_ZERO_FARE'`) are supported.
+3. **Fidelity to Timetable Semantics:** Field names `source_eta` and `source_arrival_at_destination` preserve source column identities (`eta`, `arrivalatdestination`).
+4. **Independent Route Identifiers:** `source_rno` and `source_routeno` are preserved independently to eliminate naming collisions.
+
+---
+
+## 2. Entity Mapping Matrices
+
+### 2.1 Entity: `routes` (Master Transit Corridors)
+- **Primary Source:** `all_routes_stops.json` / `all_routes_stops.csv`
+
+| Source Column / Key | Source Type | Target Table | Target Column | Target SQL Type | Transformation / Rule | Nullable? | Rationale |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `routeid` | `int` (5463) | `routes` | `route_id` | `INTEGER` | Direct mapping (`PRIMARY KEY`) | NO | Original registry key. |
+| `rno` | `string` ("101") | `routes` | `source_rno` | `VARCHAR(32)` | `TRIM(rno)` | NO | Customer line number in registry. |
+| `routeno` | `int` (3) | `routes` | `source_routeno` | `INTEGER` | Direct mapping | NO | Internal category/depot code in registry. |
+| Derived | N/A | `routes` | `route_code` | `VARCHAR(32)` | `STORED GENERATED ALWAYS AS (source_rno)` | NO | High-performance query alias. |
+| `routetype` | `string` ("Up") | `routes` | `direction` | `VARCHAR(8)` | `TRIM(routetype)` (CHECK `IN ('Up', 'Down')`) | NO | Travel direction. |
+| `routename` | `string` | `routes` | `corridor_name` | `VARCHAR(255)` | `TRIM(routename)` | NO | Corridor description. |
+| `route_name_wb` | `string` | `routes` | `corridor_name_with_code`| `VARCHAR(255)`| `TRIM(route_name_wb)` | NO | Prefixed corridor name. |
+| `displayfullroutename` | `string` | `routes` | `full_display_name` | `VARCHAR(255)` | `TRIM(displayfullroutename)` | NO | Line and direction display string. |
+| `fromstation` | `int` (1906) | `routes` | `origin_station_id` | `INTEGER` | `FK -> stations(station_id)` | NO | Starting platform ID. |
+| `tostation` | `int` (1560) | `routes` | `destination_station_id` | `INTEGER` | `FK -> stations(station_id)` | NO | Terminus platform ID. |
+| `stop_count` | `int` (38) | `routes` | `configured_stop_count` | `INTEGER` | Direct mapping | NO | Configured stop count. |
+| `geometry_count`| `int` (912) | `routes` | `geometry_point_count` | `INTEGER` | Direct mapping | NO | Count of polyline points. |
+| Derived | N/A | `routes` | `is_active_schedule` | `BOOLEAN` | `TRUE` if trips exist, else `FALSE` | NO | Flags routes lacking scheduled trips. |
+| Audit | N/A | `routes` | `import_batch_id` | `UUID` | Generated batch ID | NO | Ingestion tracking. |
+
+---
+
+### 2.2 Entity: `logical_stations` (Passenger Bus Stops)
+- **Primary Source:** `all_routes_stops.csv` / `all_routes_stops.json`
+
+| Source Column / Key | Source Type | Target Table | Target Column | Target SQL Type | Transformation / Rule | Nullable? | Rationale |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `displaystationid` | `int` (1551) | `logical_stations` | `display_station_id` | `INTEGER` | `PRIMARY KEY` (Distinct 786) | NO | Logical grouping across platforms. |
+| `displayname` | `string` | `logical_stations` | `station_name` | `VARCHAR(255)` | `TRIM(displayname)` | NO | Clean display name without directional tag. |
+| Audit | N/A | `logical_stations` | `import_batch_id` | `UUID` | Generated batch ID | NO | Ingestion tracking. |
+
+---
+
+### 2.3 Entity: `stations` (Physical Platforms) & `stg_station_coordinates_audit`
+- **Primary Source:** `all_routes_stops.csv` / `all_routes_stops.json`
+
+| Source Column / Key | Source Type | Target Table | Target Column | Target SQL Type | Transformation / Rule | Nullable? | Rationale |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `stationid` | `int` (1906) | `stations` | `station_id` | `INTEGER` | `PRIMARY KEY` (Distinct 1,187) | NO | Physical platform unique ID. |
+| `displaystationid` | `int` (1551) | `stations` | `display_station_id` | `INTEGER` | `FK -> logical_stations` | NO | Links platform to logical station. |
+| `stationname` | `string` | `stations` | `platform_name_raw` | `VARCHAR(255)` | `TRIM(stationname)` | NO | Preserves original directional name. |
+| Derived | N/A | `stations` | `platform_direction` | `VARCHAR(16)` | Inferred from `(U)`, `(D)` suffix | NO | Direction of roadway platform. |
+| `center_lat` | `float` | `stations` | `latitude` | `NUMERIC(10,6)` | Direct mapping | NO | Provisional platform latitude. |
+| `center_lon` | `float` | `stations` | `longitude` | `NUMERIC(10,6)` | Direct mapping | NO | Provisional platform longitude. |
+| Derived | N/A | `stations` | `is_provisional_coord`| `BOOLEAN` | Default `TRUE` | NO | Flags coordinates as unverified. |
+| `stationlat1` | `float` | `stg_station_coordinates_audit` | `station_lat1` | `NUMERIC(10,6)` | Direct mapping | NO | Preserves synthetic bbox $+0.05$. |
+| `stationlong1`| `float` | `stg_station_coordinates_audit` | `station_long1`| `NUMERIC(10,6)` | Direct mapping | NO | Preserves synthetic bbox $-0.05$. |
+| `stationlat2` | `float` | `stg_station_coordinates_audit` | `station_lat2` | `NUMERIC(10,6)` | Direct mapping | NO | Preserves synthetic bbox $-0.05$. |
+| `stationlong2`| `float` | `stg_station_coordinates_audit` | `station_long2`| `NUMERIC(10,6)` | Direct mapping | NO | Preserves synthetic bbox $+0.05$. |
+
+---
+
+### 2.4 Entity: `route_stops` (All 12,909 Stops Preserved)
+- **Primary Source:** `all_routes_stops.csv` / `all_routes_stops.json`
+
+| Source Column / Key | Source Type | Target Table | Target Column | Target SQL Type | Transformation / Rule | Nullable? | Rationale |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `routepartid` | `int` (36981)| `route_stops` | `route_stop_id` | `INTEGER` | `PRIMARY KEY` (Distinct 12,909) | NO | Original sequence point ID. |
+| `routeid` | `int` (5463) | `route_stops` | `route_id` | `INTEGER` | `FK -> routes(route_id)` | NO | Route foreign key. |
+| `stationid` | `int` (1906) | `route_stops` | `station_id` | `INTEGER` | `FK -> stations(station_id)` | NO | Platform foreign key. |
+| `srno` | `string` ("1")| `route_stops` | `stop_sequence` | `INTEGER` | `srno::INTEGER` | NO | Ordinal stop sequence on route. |
+| `totaldistance`| `string` ("0")| `route_stops` | `distance_from_origin_km` | `NUMERIC(8,2)` | `totaldistance::NUMERIC` | NO | Cumulative travel distance. |
+| Derived | N/A | `route_stops` | `is_consecutive_duplicate`| `BOOLEAN` | Validation flag via `LAG(station_id)` | NO | **Flag only: All 12,909 stops retained.** |
+
+---
+
+### 2.5 Entity: `trips` (Dispatch Timetable Schedule)
+- **Primary Source:** `all_route_timetables.csv`
+
+| Source Column (Pos) | Source Type | Target Table | Target Column | Target SQL Type | Transformation / Rule | Nullable? | Rationale |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `tripid` (10) | `int` | `trips` | `trip_id` | `INTEGER` | `PRIMARY KEY` (Distinct 3,547) | NO | Original dispatch primary key. |
+| `routeid` (0) | `int` | `trips` | `route_id` | `INTEGER` | `FK -> routes(route_id)` | NO | Route foreign key. |
+| `vehicleno` (15) | `string` | `trips` | `vehicle_id` | `INTEGER` | `FK -> vehicles(vehicle_id)` | NO | Vehicle foreign key. |
+| `trip_status` (11)| `string` ("0") | `trips` | `trip_status_code` | `INTEGER` | `trip_status::INTEGER` | NO | Preserves unconfirmed code. |
+| `eta` (19) | `string` ("20:15") | `trips` | `source_eta` | `TIME` | `eta::TIME` | NO | Preserves source `eta` semantic identity. |
+| `arrivalatdestination` (20)| `string` ("21:15") | `trips` | `source_arrival_at_destination` | `TIME` | `arrivalatdestination::TIME` | NO | Preserves source arrival column identity. |
+| `eta` (19) | `string` ("20:15") | `trips` | `raw_eta_text` | `VARCHAR(16)` | Verbatim string | NO | 100% source fidelity. |
+| `arrivalatdestination` (20)| `string` ("21:15") | `trips` | `raw_arrival_text` | `VARCHAR(16)` | Verbatim string | NO | 100% source fidelity. |
+| `starttrip` (12) | `string` | `trips` | `source_start_station_name` | `VARCHAR(255)` | `TRIM(starttrip)` | NO | Origin station name in timetable. |
+| `endtrip` (13) | `string` | `trips` | `source_end_station_name` | `VARCHAR(255)` | `TRIM(endtrip)` | NO | Terminus station name in timetable. |
+| `stopname` (14) | `string` | `trips` | `source_stop_name` | `VARCHAR(255)` | `TRIM(stopname)` | NO | Stop reporting name in timetable. |
+| `rno` (2) | `string` ("101") | `trips` | `source_timetable_rno` | `VARCHAR(32)` | `TRIM(rno)` | NO | Timetable customer route string. |
+| `routeno` (1) | `string` ("101") | `trips` | `source_timetable_routeno`| `VARCHAR(32)` | `TRIM(routeno)` | NO | Timetable route column string. |
+| Derived | N/A | `trips` | `is_next_day_arrival` | `BOOLEAN` | `TRUE` if arrival < eta | NO | Flags midnight crossing trips. |
+| Derived | N/A | `trips` | `scheduled_duration_mins`| `INTEGER` | Modulo 24-hr delta in minutes | NO | Trip duration without negative values. |
+| `stationfare` (21)| `string` ("0") | `trips` | `raw_stationfare` | `VARCHAR(32)` | `'0'` | NO | Preserves raw source string. |
+| Derived | N/A | `trips` | `fare_amount` | `NUMERIC(8,2)` | `NULL` while unverified | YES | Supports verified zero fare when approved. |
+| Derived | N/A | `trips` | `fare_verification_status`| `VARCHAR(32)` | Default `'UNVERIFIED'` | NO | State: `UNVERIFIED`, `VERIFIED_PAID`, `VERIFIED_ZERO_FARE`. |
+
+---
+
+### 2.6 Entity: `route_departures` & Pass Schemes
+- `citylinc_timetables.json` $\rightarrow$ `route_departures`: `route_code`, `direction`, `departure_time`, `raw_departure_string`.
+- `bus_passes.json` $\rightarrow$ `pass_types` & `pass_options`: preserves raw strings (`raw_concession_text`), parsed concessions (`concession_percentage`, `concession_fare_days`), and flat prices (`price_inr`).

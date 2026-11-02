@@ -1,0 +1,545 @@
+"""
+Location Intelligence Service for CityLinc Nashik.
+Indexes all 1,187 unique physical stations, 315 routes, and 12,909 stop instances.
+Provides high-performance spatial search, Haversine nearby station discovery,
+curated hospital & landmark registries, and route trajectory reconstruction.
+"""
+import math
+import logging
+from typing import Dict, List, Optional, Any, Set, Tuple
+from backend.app.services.citylinc_knowledge import knowledge_service, LOCATION_ALIASES, DEVANAGARI_DIGITS
+
+logger = logging.getLogger("citylinc.locations")
+
+
+def haversine_distance_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    """Calculates geodesic straight-line distance in kilometers between two GPS coordinates."""
+    R = 6371.0  # Earth radius in kilometers
+    phi1 = math.radians(lat1)
+    phi2 = math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+
+    a = (math.sin(delta_phi / 2.0) ** 2 +
+         math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2.0) ** 2)
+    c = 2.0 * math.atan2(math.sqrt(a), math.sqrt(1.0 - a))
+    return round(R * c, 3)
+
+
+class LocationIntelligenceService:
+    """Provides spatial indexing, search, and route geometry services for CityLinc Nashik."""
+
+    def __init__(self):
+        self.stations_by_id: Dict[int, Dict[str, Any]] = {}
+        self.stations_by_name: Dict[str, Dict[str, Any]] = {}
+        self.hospitals: List[Dict[str, Any]] = []
+        self.landmarks: List[Dict[str, Any]] = []
+        self.routes_summary: List[Dict[str, Any]] = []
+        self.initialized = False
+        self._build_indices()
+
+    def _normalize_query(self, text: str) -> str:
+        """Normalizes Devanagari digits and whitespace."""
+        out = text or ""
+        for d_char, a_digit in DEVANAGARI_DIGITS.items():
+            out = out.replace(d_char, a_digit)
+        return out.strip().lower()
+
+    def _determine_direction(self, station_name: str) -> str:
+        """Determines platform direction from verified station name."""
+        name_lower = station_name.lower()
+        if "(u)" in name_lower or "( u )" in name_lower or " (u)" in name_lower:
+            return "UP"
+        if "(d)" in name_lower or "( d )" in name_lower or " (d)" in name_lower:
+            return "DOWN"
+        if any(t in name_lower for t in ["terminus", "depot", "cbs"]):
+            return "TERMINAL"
+        return "BOTH"
+
+    def _categorize_station(self, station_name: str) -> Tuple[str, bool, bool, Optional[str]]:
+        """
+        Categorizes a station into medical, educational, religious, transit, or junction.
+        Returns: (primary_category, is_hospital, is_landmark, landmark_subcategory)
+        """
+        name_lower = station_name.lower()
+
+        # 1. Hospital / Medical
+        if any(k in name_lower for k in [
+            'hospital', 'rugnalaya', 'davakhana', 'clinic', 'medical', 'esi', 'civil',
+            'apollo', 'wockhardt', 'saptshrungi', 'cure', 'panchakarma'
+        ]):
+            return "hospital", True, True, "medical"
+
+        # 2. Education / Colleges / Schools
+        if any(k in name_lower for k in [
+            'college', 'vidyalaya', 'school', 'polytechnic', 'iti', 'university',
+            'campus', 'institute', 'academy', 'motiwala', 'kthm', 'bramha valley'
+        ]):
+            return "education", False, True, "education"
+
+        # 3. Temples / Religious / Cultural Heritage
+        if any(k in name_lower for k in [
+            'mandir', 'temple', 'masjid', 'dargah', 'church', 'ashram', 'gurupeeth',
+            'samarth', 'karanja', 'tapovan', 'trimbak', 'gajanan maharaj', 'balaji'
+        ]):
+            return "religious", False, True, "religious"
+
+        # 4. Major Transit Hubs & Terminals
+        if any(k in name_lower for k in [
+            'stand', 'terminus', 'depot', 'cbs', 'railway', 'station'
+        ]):
+            return "transit_hub", False, True, "transit_hub"
+
+        # 5. Junctions / Circles / Phata
+        if any(k in name_lower for k in [
+            'circle', 'naka', 'chowk', 'point', 'signal', 'corner', 'phata'
+        ]):
+            return "junction", False, True, "junction"
+
+        return "general", False, False, None
+
+    def _build_indices(self):
+        """Indexes all 1,187 unique physical stations and links them to passing routes."""
+        station_route_map: Dict[int, Set[str]] = {}
+        station_route_ids: Dict[int, Set[int]] = {}
+
+        # 1. Collect all passing routes for each station from the 12,909 route-stops
+        for r in knowledge_service.routes:
+            rid = r.get("routeid")
+            rno = str(r.get("rno", "")).strip().upper()
+            for s in r.get("stops", []):
+                sid = s.get("stationid")
+                if sid is not None:
+                    sid = int(sid)
+                    if sid not in station_route_map:
+                        station_route_map[sid] = set()
+                        station_route_ids[sid] = set()
+                    if rno:
+                        station_route_map[sid].add(rno)
+                    if rid is not None:
+                        station_route_ids[sid].add(int(rid))
+
+                    if sid not in self.stations_by_id:
+                        sname = str(s.get("stationname") or s.get("displayname") or "").strip()
+                        raw_lat = s.get("center_lat")
+                        raw_lon = s.get("center_lon")
+
+                        try:
+                            lat = float(raw_lat)
+                            lon = float(raw_lon)
+                        except (ValueError, TypeError):
+                            logger.error(f"Invalid coordinate for station {sid}: ({raw_lat}, {raw_lon})")
+                            continue
+
+                        direction = self._determine_direction(sname)
+                        cat, is_hosp, is_lm, lm_subcat = self._categorize_station(sname)
+
+                        # Clean base name (without (U) or (D))
+                        clean_base_name = sname
+                        for suffix in ["(U)", "(D)", "( U )", "( D )", " (U)", " (D)"]:
+                            clean_base_name = clean_base_name.replace(suffix, "").strip()
+
+                        station_dict = {
+                            "station_id": sid,
+                            "name": sname,
+                            "clean_name": clean_base_name,
+                            "display_name": s.get("displayname") or sname,
+                            "lat": lat,
+                            "lon": lon,
+                            "direction": direction,
+                            "category": cat,
+                            "is_hospital": is_hosp,
+                            "is_landmark": is_lm,
+                            "landmark_category": lm_subcat,
+                            "verified_coordinates": True,
+                            "coordinate_source": "CityLinc Official Center Coordinate (center_lat, center_lon)",
+                            "passing_routes": [],
+                            "passing_route_ids": [],
+                            "stop_count_in_network": 0
+                        }
+                        self.stations_by_id[sid] = station_dict
+                        self.stations_by_name[sname.lower()] = station_dict
+
+        # 2. Attach sorted routes to each station
+        for sid, st in self.stations_by_id.items():
+            routes_list = sorted(list(station_route_map.get(sid, set())), key=lambda x: (len(x), x))
+            st["passing_routes"] = routes_list
+            st["passing_route_ids"] = sorted(list(station_route_ids.get(sid, set())))
+            st["stop_count_in_network"] = len(routes_list)
+
+            if st["is_hospital"]:
+                self.hospitals.append(st)
+            if st["is_landmark"]:
+                self.landmarks.append(st)
+
+        # Sort hospitals and landmarks alphabetically
+        self.hospitals.sort(key=lambda x: x["name"])
+        self.landmarks.sort(key=lambda x: x["name"])
+
+        # 3. Build route summaries list
+        for r in knowledge_service.routes:
+            rid = r.get("routeid")
+            rno = str(r.get("rno", "")).strip().upper()
+            stops = r.get("stops", [])
+            total_dist = "0 km"
+            if stops:
+                last_dist = stops[-1].get("totaldistance")
+                if last_dist:
+                    total_dist = f"{last_dist} km"
+
+            from_st_val = r.get("fromstation")
+            to_st_val = r.get("tostation")
+
+            from_name = ""
+            if isinstance(from_st_val, int) and from_st_val in self.stations_by_id:
+                from_name = self.stations_by_id[from_st_val]["name"]
+            elif from_st_val:
+                from_name = str(from_st_val)
+            elif stops:
+                from_name = stops[0].get("stationname") or ""
+
+            to_name = ""
+            if isinstance(to_st_val, int) and to_st_val in self.stations_by_id:
+                to_name = self.stations_by_id[to_st_val]["name"]
+            elif to_st_val:
+                to_name = str(to_st_val)
+            elif stops:
+                to_name = stops[-1].get("stationname") or ""
+
+            summary = {
+                "route_id": rid,
+                "rno": rno,
+                "route_name": r.get("routename") or r.get("displayfullroutename") or "",
+                "from_station": from_name,
+                "to_station": to_name,
+                "stop_count": len(stops),
+                "total_distance": total_dist,
+                "timetable_trip_count": len(r.get("timetable", []))
+            }
+            self.routes_summary.append(summary)
+
+        self.routes_summary.sort(key=lambda x: (x["rno"], x.get("route_id") or 0))
+        self.initialized = True
+        logger.info(
+            f"LocationIntelligenceService ready: {len(self.stations_by_id)} unique physical stations, "
+            f"{len(self.hospitals)} verified hospitals, {len(self.landmarks)} landmarks indexed."
+        )
+
+    # -------------------------------------------------------------
+    # API Methods
+    # -------------------------------------------------------------
+
+    def get_all_stops(
+        self,
+        query: Optional[str] = None,
+        route_id: Optional[int] = None,
+        category: Optional[str] = None,
+        limit: int = 100,
+        offset: int = 0
+    ) -> Dict[str, Any]:
+        """Returns paginated list of physical stations with filter capabilities."""
+        results = list(self.stations_by_id.values())
+
+        if route_id is not None:
+            results = [s for s in results if route_id in s["passing_route_ids"]]
+
+        if category:
+            cat_norm = category.strip().lower()
+            results = [s for s in results if s["category"].lower() == cat_norm or s.get("landmark_category") == cat_norm]
+
+        if query:
+            q_norm = self._normalize_query(query)
+            results = [
+                s for s in results
+                if q_norm in s["name"].lower() or q_norm in s["clean_name"].lower() or any(q_norm == r.lower() for r in s["passing_routes"])
+            ]
+
+        total = len(results)
+        paginated = results[offset: offset + limit] if limit > 0 else results
+
+        return {
+            "total": total,
+            "count": len(paginated),
+            "offset": offset,
+            "limit": limit,
+            "stops": paginated
+        }
+
+    def search_locations(self, q: str, category: Optional[str] = "all", limit: int = 20) -> Dict[str, Any]:
+        """
+        Multilingual search across stops, hospitals, landmarks, and routes.
+        Supports English, Devanagari, and Roman Marathi colloquial tokens.
+        """
+        cat_filter = (category or "all").strip().lower()
+
+        if not q or not q.strip():
+            return {
+                "query": "",
+                "category": cat_filter,
+                "total_matches": 0,
+                "stops": [],
+                "routes": [],
+                "hospitals": [],
+                "landmarks": []
+            }
+
+        q_norm = self._normalize_query(q)
+        cat_filter = (category or "all").strip().lower()
+
+        # Check colloquial alias expansion
+        expanded_tokens = [q_norm]
+        for canonical, aliases in LOCATION_ALIASES.items():
+            if any(a in q_norm or q_norm in a for a in aliases):
+                expanded_tokens.append(canonical)
+                expanded_tokens.extend(aliases)
+
+        matching_stops = []
+        matching_hospitals = []
+        matching_landmarks = []
+        matching_routes = []
+
+        # 1. Search Stops
+        if cat_filter in ("all", "stop", "stops"):
+            for s in self.stations_by_id.values():
+                s_name = s["name"].lower()
+                clean_name = s["clean_name"].lower()
+                if any(tok in s_name or tok in clean_name for tok in expanded_tokens) or any(tok == r.lower() for tok in expanded_tokens for r in s["passing_routes"]):
+                    matching_stops.append(s)
+                    if len(matching_stops) >= limit * 2:
+                        break
+
+        # 2. Search Hospitals
+        if cat_filter in ("all", "hospital", "hospitals", "medical"):
+            for h in self.hospitals:
+                h_name = h["name"].lower()
+                if any(tok in h_name for tok in expanded_tokens):
+                    matching_hospitals.append(h)
+                    if len(matching_hospitals) >= limit:
+                        break
+
+        # 3. Search Landmarks
+        if cat_filter in ("all", "landmark", "landmarks"):
+            for lm in self.landmarks:
+                lm_name = lm["name"].lower()
+                if any(tok in lm_name for tok in expanded_tokens):
+                    matching_landmarks.append(lm)
+                    if len(matching_landmarks) >= limit:
+                        break
+
+        # 4. Search Routes
+        if cat_filter in ("all", "route", "routes"):
+            for r in self.routes_summary:
+                rno = r["rno"].lower()
+                rname = r["route_name"].lower()
+                if any(tok == rno or tok in rname for tok in expanded_tokens):
+                    matching_routes.append(r)
+                    if len(matching_routes) >= limit:
+                        break
+
+        total_matches = len(matching_stops) + len(matching_routes) + len(matching_hospitals) + len(matching_landmarks)
+
+        return {
+            "query": q,
+            "category": cat_filter,
+            "total_matches": total_matches,
+            "stops": matching_stops[:limit],
+            "routes": matching_routes[:limit],
+            "hospitals": matching_hospitals[:limit],
+            "landmarks": matching_landmarks[:limit]
+        }
+
+    def get_nearby_stops(
+        self,
+        lat: float,
+        lon: float,
+        radius_km: float = 2.0,
+        limit: int = 20
+    ) -> Dict[str, Any]:
+        """
+        Finds physical transit stops within straight-line Haversine radius of GPS coordinates.
+        Does not claim geodesic distance is road/walking distance.
+        """
+        # Validate coordinates
+        if not (-90.0 <= lat <= 90.0 and -180.0 <= lon <= 180.0):
+            return {
+                "error": "Invalid latitude/longitude coordinates",
+                "center": {"lat": lat, "lon": lon},
+                "count": 0,
+                "stops": []
+            }
+
+        nearby_list = []
+        for s in self.stations_by_id.values():
+            dist = haversine_distance_km(lat, lon, s["lat"], s["lon"])
+            if dist <= radius_km:
+                item = dict(s)
+                item["distance_km"] = dist
+                item["distance_meters"] = int(dist * 1000)
+                nearby_list.append(item)
+
+        # Sort by distance ascending
+        nearby_list.sort(key=lambda x: x["distance_km"])
+        sliced = nearby_list[:limit]
+
+        return {
+            "center": {"lat": lat, "lon": lon},
+            "radius_km": radius_km,
+            "total_found": len(nearby_list),
+            "count": len(sliced),
+            "disclaimer": "Distances represent geodesic straight-line distance, not actual walking or road route distance.",
+            "stops": sliced
+        }
+
+    def get_hospitals(self, query: Optional[str] = None, limit: int = 50) -> Dict[str, Any]:
+        """Returns verified hospital bus stops with passing routes and emergency transit access."""
+        results = list(self.hospitals)
+        if query:
+            q_norm = self._normalize_query(query)
+            results = [h for h in results if q_norm in h["name"].lower() or any(q_norm == r.lower() for r in h["passing_routes"])]
+
+        sliced = results[:limit]
+        return {
+            "total": len(results),
+            "count": len(sliced),
+            "category": "hospitals_medical",
+            "hospitals": sliced
+        }
+
+    def get_landmarks(
+        self,
+        category: Optional[str] = None,
+        query: Optional[str] = None,
+        limit: int = 100
+    ) -> Dict[str, Any]:
+        """Returns categorized landmark stops (education, religious, transit_hub, junction)."""
+        results = list(self.landmarks)
+
+        if category:
+            cat_norm = category.strip().lower()
+            results = [lm for lm in results if lm.get("landmark_category") == cat_norm or lm.get("category") == cat_norm]
+
+        if query:
+            q_norm = self._normalize_query(query)
+            results = [lm for lm in results if q_norm in lm["name"].lower()]
+
+        sliced = results[:limit]
+        return {
+            "total": len(results),
+            "count": len(sliced),
+            "filter_category": category or "all",
+            "landmarks": sliced
+        }
+
+    def get_route_trajectory(self, route_id_or_number: str) -> Dict[str, Any]:
+        """
+        Reconstructs the full route trajectory, ordered stop sequence, and deduplicated polyline.
+        Accepts integer route_id (e.g. 6601) or route number string (e.g. '101').
+        Deduplicates adjacent duplicate coordinates (DQI-004) for clean polyline rendering.
+        """
+        target_route = None
+
+        # 1. Try by integer routeid
+        try:
+            rid = int(route_id_or_number)
+            if rid in knowledge_service.routes_by_id:
+                target_route = knowledge_service.routes_by_id[rid]
+        except ValueError:
+            pass
+
+        # 2. Try by public route number (rno)
+        if not target_route:
+            rno_clean = str(route_id_or_number).strip().upper()
+            if rno_clean in knowledge_service.routes_by_number:
+                corridors = knowledge_service.routes_by_number[rno_clean]
+                if corridors:
+                    target_route = corridors[0]  # Default to primary corridor
+
+        if not target_route:
+            return {
+                "error": f"Route '{route_id_or_number}' not found in CityLinc network.",
+                "route_id": None,
+                "stops": [],
+                "polyline": []
+            }
+
+        rid = target_route.get("routeid")
+        rno = str(target_route.get("rno", "")).strip().upper()
+        raw_stops = target_route.get("stops", [])
+
+        ordered_stops = []
+        polyline = []
+        last_coord = None
+
+        for s in raw_stops:
+            sid = s.get("stationid")
+            sname = str(s.get("stationname") or s.get("displayname") or "").strip()
+            srno = s.get("srno")
+            dist = s.get("totaldistance")
+            raw_lat = s.get("center_lat")
+            raw_lon = s.get("center_lon")
+
+            try:
+                lat = float(raw_lat)
+                lon = float(raw_lon)
+            except (ValueError, TypeError):
+                continue
+
+            direction = self._determine_direction(sname)
+            stop_meta = {
+                "srno": int(srno) if str(srno).isdigit() else 0,
+                "station_id": int(sid) if sid is not None else None,
+                "name": sname,
+                "lat": lat,
+                "lon": lon,
+                "total_distance_km": float(dist) if dist and str(dist).replace(".", "").isdigit() else 0.0,
+                "direction": direction
+            }
+            ordered_stops.append(stop_meta)
+
+            # Build polyline: deduplicate consecutive identical coordinates (DQI-004)
+            current_coord = [lat, lon]
+            if last_coord is None or (current_coord[0] != last_coord[0] or current_coord[1] != last_coord[1]):
+                polyline.append(current_coord)
+                last_coord = current_coord
+
+        origin_stop = ordered_stops[0] if ordered_stops else None
+        dest_stop = ordered_stops[-1] if ordered_stops else None
+
+        from_st_val = target_route.get("fromstation")
+        to_st_val = target_route.get("tostation")
+
+        from_station_name = ""
+        if isinstance(from_st_val, int) and from_st_val in self.stations_by_id:
+            from_station_name = self.stations_by_id[from_st_val]["name"]
+        elif from_st_val:
+            from_station_name = str(from_st_val)
+        elif origin_stop:
+            from_station_name = origin_stop["name"]
+
+        to_station_name = ""
+        if isinstance(to_st_val, int) and to_st_val in self.stations_by_id:
+            to_station_name = self.stations_by_id[to_st_val]["name"]
+        elif to_st_val:
+            to_station_name = str(to_st_val)
+        elif dest_stop:
+            to_station_name = dest_stop["name"]
+
+        return {
+            "route_id": rid,
+            "rno": rno,
+            "route_name": target_route.get("routename") or target_route.get("displayfullroutename") or "",
+            "from_station": from_station_name,
+            "to_station": to_station_name,
+            "stop_count": len(ordered_stops),
+            "total_distance_km": ordered_stops[-1]["total_distance_km"] if ordered_stops else 0.0,
+            "origin": origin_stop,
+            "destination": dest_stop,
+            "stops": ordered_stops,
+            "polyline": polyline,
+            "deduplicated_points_count": len(polyline),
+            "raw_stops_count": len(ordered_stops)
+        }
+
+
+# Global singleton service
+location_service = LocationIntelligenceService()

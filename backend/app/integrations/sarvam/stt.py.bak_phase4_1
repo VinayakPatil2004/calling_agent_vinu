@@ -1,0 +1,135 @@
+"""
+Sarvam Speech-to-Text (STT) Client.
+Supports Saaras v4 model with multilingual auto-detection (mr-IN, hi-IN, en-IN).
+"""
+import io
+import logging
+from typing import Dict, Any, Optional
+import httpx
+from backend.app.core.config import settings
+from backend.app.core.exceptions import SarvamAPIError
+
+logger = logging.getLogger("citylinc.sarvam.stt")
+
+class SarvamSTTClient:
+    """Client for Sarvam Speech-to-Text API (Saaras v4 / v1)."""
+
+    def __init__(self, api_key: Optional[str] = None, base_url: Optional[str] = None):
+        self.api_key = settings.SARVAM_API_KEY if api_key is None else api_key
+        self.base_url = (base_url or settings.SARVAM_BASE_URL).rstrip("/")
+        self.endpoint = f"{self.base_url}/speech-to-text"
+        self.model = settings.SARVAM_STT_MODEL
+
+    async def transcribe(
+        self,
+        audio_bytes: bytes,
+        language_code: str = "unknown",
+        model: Optional[str] = None,
+        filename: str = "audio.wav",
+        mime_type: str = "audio/wav"
+    ) -> Dict[str, Any]:
+        """
+        Sends audio bytes to Sarvam Speech-to-Text.
+        Returns dictionary with 'transcript' and 'language_code'.
+        """
+        if not audio_bytes or len(audio_bytes) < 100:
+            return {"transcript": "", "language_code": language_code, "error": "Audio too short"}
+
+        target_model = model or self.model
+
+        # If no API key configured, provide structured simulation / test response
+        if not self.api_key or len(self.api_key) < 5:
+            logger.warning("SARVAM_API_KEY is not configured in backend/.env. Returning simulation/test response.")
+            return {
+                "transcript": "नमस्कार, सिटीलिंक नाशिक बस सेवेबद्दल माहिती हवी आहे",
+                "language_code": "mr-IN",
+                "is_simulation": True,
+                "note": "Configure SARVAM_API_KEY in backend/.env for live cloud transcription."
+            }
+
+        headers = {
+            "api-subscription-key": self.api_key
+        }
+
+        # Normalize multipart upload Content-Type by stripping any codec parameters (e.g. 'audio/webm;codecs=opus' -> 'audio/webm')
+        clean_mime = (mime_type or "audio/wav").split(";")[0].strip().lower()
+        if "webm" in clean_mime or "opus" in clean_mime:
+            actual_filename = "recording.webm"
+            clean_mime = "audio/webm"
+        elif "mp3" in clean_mime or "mpeg" in clean_mime:
+            actual_filename = "recording.mp3"
+            clean_mime = "audio/mpeg"
+        elif "ogg" in clean_mime:
+            actual_filename = "recording.ogg"
+            clean_mime = "audio/ogg"
+        elif "wav" in clean_mime:
+            actual_filename = "recording.wav"
+            clean_mime = "audio/wav"
+        else:
+            actual_filename = "recording.webm" if "webm" in filename else "recording.wav"
+            clean_mime = "audio/webm" if "webm" in filename else "audio/wav"
+
+        # Diagnostic log showing filename, MIME type and byte size before the Sarvam request
+        logger.info(
+            f"Preparing Sarvam STT request: filename='{actual_filename}', "
+            f"content_type='{clean_mime}', byte_size={len(audio_bytes)} bytes, model='{target_model}'"
+        )
+
+        files = {
+            "file": (actual_filename, audio_bytes, clean_mime)
+        }
+        data = {
+            "model": target_model,
+            "mode": "transcribe"
+        }
+        
+        # If user explicitly selected a language or "unknown" for auto-detection
+        if language_code and language_code != "auto":
+            data["language_code"] = language_code
+        else:
+            data["language_code"] = "unknown"
+
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                response = await client.post(
+                    self.endpoint,
+                    headers=headers,
+                    files=files,
+                    data=data
+                )
+                
+                # Check for model fallback if saaras:v4 is temporarily restricted on specific tier
+                if response.status_code == 400 and target_model == "saaras:v4":
+                    logger.warning("saaras:v4 returned 400, falling back to saaras:v3...")
+                    data["model"] = "saaras:v3"
+                    files["file"] = (actual_filename, audio_bytes, clean_mime)
+                    response = await client.post(
+                        self.endpoint,
+                        headers=headers,
+                        files=files,
+                        data=data
+                    )
+
+                if response.status_code != 200:
+                    err_msg = f"Sarvam STT failed with status {response.status_code}: {response.text}"
+                    logger.error(err_msg)
+                    raise SarvamAPIError(err_msg, details={"status": response.status_code, "response": response.text})
+
+                res_json = response.json()
+                transcript = res_json.get("transcript", "").strip()
+                detected_lang = res_json.get("language_code", language_code)
+                
+                logger.info(f"STT Transcript: '{transcript}' [Lang: {detected_lang}]")
+                return {
+                    "transcript": transcript,
+                    "language_code": detected_lang,
+                    "raw": res_json
+                }
+
+        except httpx.RequestError as e:
+            logger.error(f"Network error calling Sarvam STT: {e}")
+            raise SarvamAPIError(f"Network connection error to Sarvam STT: {e}")
+
+# Global singleton
+stt_client = SarvamSTTClient()
+

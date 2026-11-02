@@ -1,0 +1,185 @@
+# CityLinc AI Calling Agent — Source-to-Target Data Mapping Specification
+
+**Document ID:** `SOURCE_TO_TARGET_MAPPING.md`  
+**Phase:** P0.2 — Final Database Design Specification (Post-Remediation Revision)  
+**Status:** DRAFT / APPROVED FOR DESIGN  
+**Classification:** Transit Architecture Data Lineage Specification  
+
+---
+
+## Verifiable Database Safety Statement
+
+> **Database Safety Notice:**  
+> This audit executed zero SQL statements, established zero database connections, and created no database objects. The existing PostgreSQL database state was not inspected because database connections are prohibited under strict read-only execution. All schemas, DDL definitions, transformation pipelines, and reports in this document are strictly proposed specifications awaiting authorized Phase 2 execution.
+
+---
+
+## 1. Lineage Architecture & Review Revisions
+
+This specification traces field-level lineage between the eight primary raw datasets across canonical subdirectories (`data/raw/routes/`, `data/raw/timetables/`, `data/raw/fare/`) and the proposed PostgreSQL relational schema. It incorporates all corrections and hardening requirements from the Principal Database Architect and Quality Verification Audits:
+
+1. **Preservation of All 12,909 Stop Sequences:** `route_stops` retains 100% of source records without suppression. Exactly 63 consecutive duplicate stop pairs (126 physical records) across Routes 6710, 6908, and 6866 are flagged via validation column `is_consecutive_duplicate = TRUE`. Exactly 66 unique physical station IDs repeat across these routes.
+2. **Surrogate vs. Natural Key Separation:** The target primary key `route_stop_id` is an internal synthetic surrogate key. The source natural key `routepartid` is preserved independently as `source_routepartid`. Prior to ingestion, ETL validation requires verification that `routepartid` contains exactly 12,909 distinct values across all 12,909 rows.
+3. **Sequence-Level Coordinate Lineage & Pattern Attribution:** Bounding coordinates are mapped to `route_stop_coordinates_audit` keyed to `route_stop_id` (not aggregated by `station_id`), retaining `source_routepartid` and the physical 1-based `source_row_number`. Coordinate offsets are tracked via `matches_observed_offset_pattern BOOLEAN NOT NULL`. Standard attribution rule applies:
+   > *"The 0.001-degree decimal variations observed across route stops reflect a uniform numerical offset pattern in the raw source asset rather than verified physical ground coordinates. Ingestion preserves raw numeric values while tracking this pattern via matches_observed_offset_pattern."*
+4. **Distance Units:** Column `totaldistance` in `all_routes_stops.csv` is mapped to `distance_from_origin_km NUMERIC(8,2)`. Primary source data profiling verifies that source values represent cumulative decimal kilometres (ranging from 0.00 to 45.40 km on Route 5989).
+5. **Hardened Fare Verification Constraint:** The table-level CHECK constraint on `trips` enforces strict boolean evaluation (`(CASE ... END) IS TRUE`), preventing SQL NULL/UNKNOWN bypass on `VERIFIED_PAID`.
+6. **Fidelity to Source Timetable Semantics:** Field names `source_eta` and `source_arrival_at_destination` preserve source columns `eta` and `arrivalatdestination`. Verbatim strings are preserved in `raw_eta_text` and `raw_arrival_text` (`VARCHAR(16) NOT NULL`). Duration and overnight crossings are mapped to `provisional_duration_mins` and `provisional_is_next_day_arrival`.
+7. **Stationfare Field Meaning:** Column `stationfare` is mapped to `raw_stationfare VARCHAR(32) NOT NULL DEFAULT '0'`. Mandatory interpretation statement:
+   > *"All 3,547 timetable records contain matching StopName and StartTrip values, with stationfare = 0. The operational and fare meaning of these fields remains unconfirmed and requires operator clarification."*
+8. **Trip Status Codes:** Column 11 `trip_status` is mapped to `trips.trip_status_code` (`INT`), preserving unconfirmed codes `0` (2,085 rows), `2` (1,237 rows), `6` (218 rows), and `9` (7 rows). Column 15 is `vehicleno`. No business meanings are inferred without an official dictionary.
+9. **Dual-Array Departure Indexing:** Lineage in `route_departures` tracks both `source_route_array_index` (0–119) and `source_departure_token_index`, with deterministic `occurrence_index` (no default), preserving all 2,318 tokens conditionally upon complete parsing and mapping.
+10. **Full Fare Source Integration:** Incorporates distance fare stages from `fare_matrix.pdf` (32 slabs; boundary intervals marked `OPERATOR_CONFIRMATION_REQUIRED`; Row 32 Above-62-km base fare cells blank, Gov Max ₹30 per 10 km) and concession policies from `New Fare Passes.pdf` (Kids 50%, Blind/Differently Abled $\ge 40\%$ in NMC 100% Free, Differently Abled outside NMC 75%, Companion of $\ge 65\%$ disability 50% Concession; Student Pass 50% for 30D, 66.66% in PDF / 66.60% in JSON; Fixed-Route Pass 30D = 20 days fare, 90D = 50 days fare).
+
+---
+
+## 2. Entity Mapping Matrices
+
+### 2.1 Entity: `routes` (Master Transit Corridors)
+- **Primary Source:** `data/raw/routes/all_routes_stops.json` / `data/raw/routes/all_routes_stops.csv`
+
+| Source Column / Key | Source Type | Target Table | Target Column | Target SQL Type | Transformation / Rule | Nullable? | Rationale |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `routeid` | `int` (5463) | `routes` | `route_id` | `INTEGER` | Direct mapping (`PRIMARY KEY`) | NO | Original master registry key (315 distinct). |
+| `rno` | `string` ("101") | `routes` | `source_rno` | `VARCHAR(32)` | `TRIM(rno)` | NO | Customer line number in registry (121 unique). |
+| `routeno` | `int` (3) | `routes` | `source_routeno` | `INTEGER` | Direct mapping | NO | Internal category/depot code in registry (values 3, 4, 6). |
+| Derived | N/A | `routes` | `route_code` | `VARCHAR(32)` | `STORED GENERATED ALWAYS AS (source_rno)` | NO | High-performance query alias. |
+| `routetype` | `string` ("Up") | `routes` | `direction` | `VARCHAR(8)` | `TRIM(routetype)` (CHECK `IN ('Up', 'Down')`) | NO | Travel direction. |
+| `routename` | `string` | `routes` | `corridor_name` | `VARCHAR(255)` | `TRIM(routename)` | NO | Corridor description. |
+| `route_name_wb` | `string` | `routes` | `corridor_name_with_code`| `VARCHAR(255)`| `TRIM(route_name_wb)` | NO | Prefixed corridor name. |
+| `displayfullroutename` | `string` | `routes` | `full_display_name` | `VARCHAR(255)` | `TRIM(displayfullroutename)` | NO | Line and direction display string. |
+| `fromstation` | `int` (1906) | `routes` | `origin_station_id` | `INTEGER` | `FK -> stations(station_id)` | NO | Starting platform ID. |
+| `tostation` | `int` (1560) | `routes` | `destination_station_id` | `INTEGER` | `FK -> stations(station_id)` | NO | Terminus platform ID. |
+| `stop_count` | `int` (38) | `routes` | `configured_stop_count` | `INTEGER` | Direct mapping | NO | Configured stop count. |
+| `geometry_count`| `int` (912) | `routes` | `geometry_point_count` | `INTEGER` | Direct mapping | NO | Count of polyline points. |
+| Derived | N/A | `routes` | `is_active_schedule` | `BOOLEAN` | `TRUE` if trips exist, else `FALSE` | NO | Flags routes lacking scheduled trips (6625, 6664, 6784, 7007). |
+| Audit | N/A | `routes` | `import_batch_id` | `UUID` | Generated batch ID | NO | Ingestion tracking. |
+
+---
+
+### 2.2 Entity: `logical_stations` (Passenger Bus Stops)
+- **Primary Source:** `data/raw/routes/all_routes_stops.csv` / `data/raw/routes/all_routes_stops.json`
+
+| Source Column / Key | Source Type | Target Table | Target Column | Target SQL Type | Transformation / Rule | Nullable? | Rationale |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `displaystationid` | `int` (1551) | `logical_stations` | `display_station_id` | `INTEGER` | `PRIMARY KEY` (Distinct 786) | NO | Logical grouping across bidirectional platforms. |
+| `displayname` | `string` | `logical_stations` | `station_name` | `VARCHAR(255)` | `TRIM(displayname)` | NO | Clean display name without directional tag. |
+| Audit | N/A | `logical_stations` | `import_batch_id` | `UUID` | Generated batch ID | NO | Ingestion tracking. |
+
+---
+
+### 2.3 Entity: `stations` (Physical Platforms) & `route_stop_coordinates_audit`
+- **Primary Source:** `data/raw/routes/all_routes_stops.csv` / `data/raw/routes/all_routes_stops.json`
+
+| Source Column / Key | Source Type | Target Table | Target Column | Target SQL Type | Transformation / Rule | Nullable? | Rationale |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `stationid` | `int` (1906) | `stations` | `station_id` | `INTEGER` | `PRIMARY KEY` (Distinct 1,187) | NO | Physical platform unique ID. |
+| `displaystationid` | `int` (1551) | `stations` | `display_station_id` | `INTEGER` | `FK -> logical_stations` | NO | Links platform to logical station. |
+| `stationname` | `string` | `stations` | `platform_name_raw` | `VARCHAR(255)` | `TRIM(stationname)` | NO | Preserves original directional name. |
+| Derived | N/A | `stations` | `platform_direction` | `VARCHAR(16)` | Inferred from `(U)`, `(D)` suffix | NO | Direction of roadway platform. |
+| `center_lat` | `float` | `stations` | `latitude` | `NUMERIC(10,6)` | Direct mapping | NO | Provisional platform latitude. |
+| `center_lon` | `float` | `stations` | `longitude` | `NUMERIC(10,6)` | Direct mapping | NO | Provisional platform longitude. |
+| Derived | N/A | `stations` | `is_provisional_coord`| `BOOLEAN` | Default `TRUE` | NO | Flags coordinates as unverified provisional data. |
+| `routepartid` | `int` (36981) | `route_stop_coordinates_audit` | `route_stop_id` | `INTEGER` | `PRIMARY KEY REFERENCES route_stops` | NO | Anchors audit to exact stop sequence instance. |
+| `stationid` | `int` (1906) | `route_stop_coordinates_audit` | `station_id` | `INTEGER` | `REFERENCES stations(station_id)` | NO | Platform foreign key. |
+| `routepartid` | `int` (36981) | `route_stop_coordinates_audit` | `source_routepartid` | `INTEGER` | Direct mapping | NO | Preserves original natural sequence key. |
+| Source Row Index | `int` | `route_stop_coordinates_audit` | `source_row_number` | `INTEGER` | 1-based CSV line number | NO | Physical row lineage in `all_routes_stops.csv`. |
+| `center_lat` | `float` | `route_stop_coordinates_audit` | `center_lat` | `NUMERIC(10,6)` | Direct mapping | NO | Center latitude anchor. |
+| `center_lon` | `float` | `route_stop_coordinates_audit` | `center_lon` | `NUMERIC(10,6)` | Direct mapping | NO | Center longitude anchor. |
+| `stationlat1` | `float` | `route_stop_coordinates_audit` | `station_lat1` | `NUMERIC(10,6)` | Direct mapping | NO | Preserves offset $pprox +0.05^\circ$. |
+| `stationlong1`| `float` | `route_stop_coordinates_audit` | `station_long1`| `NUMERIC(10,6)` | Direct mapping | NO | Preserves offset $pprox +0.05^\circ$. |
+| `stationlat2` | `float` | `route_stop_coordinates_audit` | `station_lat2` | `NUMERIC(10,6)` | Direct mapping | NO | Preserves offset $pprox -0.05^\circ$. |
+| `stationlong2`| `float` | `route_stop_coordinates_audit` | `station_long2`| `NUMERIC(10,6)` | Direct mapping | NO | Preserves offset $pprox -0.05^\circ$. |
+| Derived | N/A | `route_stop_coordinates_audit` | `matches_observed_offset_pattern` | `BOOLEAN` | Check against formula | NO | TRUE if coordinates match $\pm 0.05^\circ$ pattern. |
+
+---
+
+### 2.4 Entity: `route_stops` (All 12,909 Stops Preserved)
+- **Primary Source:** `data/raw/routes/all_routes_stops.csv` / `data/raw/routes/all_routes_stops.json`
+
+| Source Column / Key | Source Type | Target Table | Target Column | Target SQL Type | Transformation / Rule | Nullable? | Rationale |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `routepartid` | `int` (36981)| `route_stops` | `route_stop_id` | `INTEGER` | `PRIMARY KEY` (Surrogate PK) | NO | Internal synthetic primary key. Distinct 12,909 values. |
+| `routeid` | `int` (5463) | `route_stops` | `route_id` | `INTEGER` | `FK -> routes(route_id)` | NO | Route foreign key. |
+| `stationid` | `int` (1906) | `route_stops` | `station_id` | `INTEGER` | `FK -> stations(station_id)` | NO | Platform foreign key. |
+| `srno` | `string` ("1")| `route_stops` | `stop_sequence` | `INTEGER` | `srno::INTEGER` | NO | Ordinal stop sequence on route (1 to 105). |
+| `totaldistance`| `string` ("0")| `route_stops` | `distance_from_origin_km` | `NUMERIC(8,2)` | `totaldistance::NUMERIC(8,2)` | NO | Cumulative travel distance. Unit: Verified decimal kilometres (range: 0.00 to 45.40 km). |
+| Derived | N/A | `route_stops` | `is_consecutive_duplicate`| `BOOLEAN` | Validation flag via `LAG(station_id)` | NO | **Flag only: All 12,909 stops retained.** Flags 63 consecutive duplicate pairs (126 rows) across Routes 6710, 6908, 6866. |
+| Audit | N/A | `route_stops` | `import_batch_id` | `UUID` | Generated batch ID | NO | Ingestion tracking. |
+
+---
+
+### 2.5 Entity: `vehicles` and `trips` (Dispatch Timetable Schedule)
+- **Primary Source:** `data/raw/routes/all_route_timetables.csv`
+
+| Source Column (Pos) | Source Type | Target Table | Target Column | Target SQL Type | Transformation / Rule | Nullable? | Rationale |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `tripid` (10) | `int` | `trips` | `trip_id` | `INTEGER` | `PRIMARY KEY` (Distinct 3,547) | NO | Original CAD/AVL dispatch primary key. |
+| `routeid` (0) | `int` | `trips` | `route_id` | `INTEGER` | `FK -> routes(route_id)` | NO | Route foreign key (311 matched / 4 unmatched). |
+| `vehicleno` (15) | `string` | `trips` | `vehicle_id` | `INTEGER` | `FK -> vehicles(vehicle_id)` | NO | Vehicle foreign key (244 distinct vehicles). |
+| `trip_status` (11)| `string` ("0") | `trips` | `trip_status_code` | `INTEGER` | `trip_status::INTEGER` | NO | Preserves unconfirmed codes: `0` (2,085), `2` (1,237), `6` (218), `9` (7). Column 15 is `vehicleno`. |
+| `eta` (19) | `string` ("20:15") | `trips` | `source_eta` | `TIME` | `eta::TIME` | NO | Preserves source `eta` semantic identity (departure vs arrival unconfirmed). |
+| `arrivalatdestination` (20)| `string` ("21:15") | `trips` | `source_arrival_at_destination` | `TIME` | `arrivalatdestination::TIME` | NO | Preserves source arrival column identity. |
+| `eta` (19) | `string` ("20:15") | `trips` | `raw_eta_text` | `VARCHAR(16)` | Verbatim string | NO | 100% source string fidelity. |
+| `arrivalatdestination` (20)| `string` ("21:15") | `trips` | `raw_arrival_text` | `VARCHAR(16)` | Verbatim string | NO | 100% source string fidelity (aligned with DDL). |
+| `starttrip` (12) | `string` | `trips` | `source_start_station_name` | `VARCHAR(255)` | `TRIM(starttrip)` | NO | Origin station name in timetable. |
+| `endtrip` (13) | `string` | `trips` | `source_end_station_name` | `VARCHAR(255)` | `TRIM(endtrip)` | NO | Terminus station name in timetable. |
+| `stopname` (14) | `string` | `trips` | `source_stop_name` | `VARCHAR(255)` | `TRIM(stopname)` | NO | Stop reporting name in timetable (`StopName == StartTrip` in 100% of rows). |
+| `rno` (2) | `string` ("101") | `trips` | `source_timetable_rno` | `VARCHAR(32)` | `TRIM(rno)` | NO | Timetable customer route string. |
+| `routeno` (1) | `string` ("101") | `trips` | `source_timetable_routeno`| `VARCHAR(32)` | `TRIM(routeno)` | NO | Timetable route column string. |
+| Derived | N/A | `trips` | `provisional_is_next_day_arrival` | `BOOLEAN` | `TRUE` if arrival < eta | NO | Flags 9 midnight crossing trips (provisional pending operator confirmation). |
+| Derived | N/A | `trips` | `provisional_duration_mins`| `INTEGER` | Modulo 24-hr delta in minutes | NO | Trip duration without negative values (provisional pending operator confirmation). |
+| `stationfare` (21)| `string` ("0") | `trips` | `raw_stationfare` | `VARCHAR(32)` | `'0'` | NO | Preserves raw source string. Operational meaning unconfirmed. |
+| Derived | N/A | `trips` | `fare_amount` | `NUMERIC(8,2)` | `NULL` while unverified | YES | Supports verified zero fare when approved. |
+| Derived | N/A | `trips` | `fare_verification_status`| `VARCHAR(32)` | Default `'UNVERIFIED'` | NO | State: `UNVERIFIED`, `VERIFIED_PAID`, `VERIFIED_ZERO_FARE`, `UNAVAILABLE`. Hardened via `(CASE ... END) IS TRUE`. |
+
+---
+
+### 2.6 Entity: `route_departures` (Timetable Bulletin Ingestion)
+- **Primary Source:** `data/raw/timetables/citylinc_timetables.json`
+
+| Source Field | Source Type | Target Table | Target Column | Target SQL Type | Transformation / Rule | Nullable? | Rationale |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| Generated | N/A | `route_departures` | `departure_id` | `SERIAL` | `PRIMARY KEY` | NO | Surrogate primary key. |
+| `route_no` | `string` ("104") | `route_departures` | `route_code` | `VARCHAR(32)` | `TRIM(route_no)` | NO | Public route line identifier. |
+| Direction Field | Source Key | `route_departures` | `direction` | `VARCHAR(8)` | `'Up'` for `source_departures`, `'Down'` for `destination_departures` | NO | Traversal direction. |
+| Extracted Token | `string` ("09:50") | `route_departures` | `departure_time` | `TIME` | Regex parse `\d{2}:\d{2}` | NO | Scheduled departure time. |
+| Top Array Pos | `int` (0–119) | `route_departures` | `source_route_array_index` | `INTEGER` | 0-based array index | NO | Positional lineage in top-level JSON array. |
+| Token Pos | `int` | `route_departures` | `source_departure_token_index` | `INTEGER` | 0-based token index in string | NO | Positional lineage within extracted departure list. |
+| Full String | `string` | `route_departures` | `raw_departure_string` | `TEXT` | Verbatim directional string | NO | Complete source string fidelity. |
+| Derived | N/A | `route_departures` | `occurrence_index` | `SMALLINT` | `ROW_NUMBER() OVER (...)` | NO | Deterministic 1-based rank for identical times (NO DEFAULT). |
+
+> [!IMPORTANT]
+> **Conditional Departure Preservation Requirement:** Complete preservation of all 2,318 departure tokens across the 120 route items is strictly conditional upon: (1) complete parsing of raw departure token strings, (2) valid route code and direction mapping, and (3) successful assignment of unique, deterministic `occurrence_index` values without collision. Unconditional preservation cannot be asserted until ingestion routines are fully executed and validated.
+
+---
+
+### 2.7 Fare Masters: `tariff_versions`, `fare_stage_rates`, `fare_concession_policies` & `route_pass_rates`
+- **Primary Sources:** `data/raw/fare/fare_matrix.pdf`, `data/raw/fare/New Fare Passes.pdf`, `data/raw/fare/bus_passes.json`
+
+| Source Entity / Slabs | Target Table | Key Target Columns | Target Types | Source Lineage Columns | Policy / Ingestion Rule |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Tariff Resolution** | `tariff_versions` | `tariff_version_id` (PK), `tariff_name`, `effective_date`, `resolution_number`, `is_active` | `SERIAL`, `VARCHAR(64)`, `DATE`, `VARCHAR(64)`, `BOOLEAN` | `source_file_id` | Captures May 2023 revision and future tariff versions. |
+| **Distance Slabs (32 Slabs)** | `fare_stage_rates` | `fare_stage_id` (PK), `tariff_version_id` (FK), `from_km`, `to_km`, `adult_rate_inr`, `child_rate_inr` | `SERIAL`, `INTEGER`, `NUMERIC(6,2)`, `NUMERIC(6,2)`, `NUMERIC(6,2)`, `NUMERIC(6,2)` | `source_file_id`, `source_page_number` (1), `source_table_name`, `source_row_index` (1–32), `source_slab_label` | Preserves original slab text (`0-2`, ..., `Above 62 km`). Inclusivity marked `OPERATOR_CONFIRMATION_REQUIRED`. Row 32 base fares are NULL (blank in source); Gov Max ₹30 / 10 km recorded in rules. |
+| **Concessions & Policies** | `fare_concession_policies` | `policy_id` (PK), `tariff_version_id` (FK), `category_name`, `concession_percentage`, `eligibility_rule` | `SERIAL`, `INTEGER`, `VARCHAR(64)`, `NUMERIC(5,2)`, `TEXT` | `source_file_id`, `source_page_number` (1), `source_table_name`, `source_category_clause` | Kids: 50%; Differently Abled ($\ge 40\%$ NMC): 100% Free; Differently Abled outside NMC: 75%; Companion ($\ge 65\%$ disability): 50% Concession. |
+| **Pass Schemes** | `pass_types` & `pass_options` | `pass_type_code` (PK), `option_id` (PK), `duration_days`, `amount_inr`, `concession_percentage` | `VARCHAR(32)`, `SERIAL`, `INTEGER`, `NUMERIC(8,2)`, `NUMERIC(5,2)` | `source_file_id`, `source_pass_scheme_key`, `source_option_array_index` | Open-Ended: 1D (110), 3D (270 in PDF), 7D (530), 30D (2100), 90D (5250), 180D (9450). Student Pass: 30D (50%), 90D (66.66% PDF / 66.60% JSON). No 180-day student pass. |
+| **Fixed-Route Passes** | `route_pass_rates` | `route_pass_id` (PK), `pass_type_code` (FK), `duration_days`, `fare_day_multiplier` | `SERIAL`, `VARCHAR(32)`, `INTEGER`, `INTEGER` | `source_file_id`, `source_page_number` (1), `source_table_name` | Fixed-Route travel day pricing: 30 Days = 20 Days' fare; 90 Days = 50 Days' fare. |
+
+---
+
+## 3. Format-Specific Source Lineage Specification Matrix
+
+Lineage metadata is separated by storage format to prevent forced, artificial, or NULL fields:
+
+| Source File | Source Format | Verified Source Structure | Proposed Database Target Table | Target Primary Key | Dedicated Lineage Columns | Validation & Lineage Enforcement Rule | Lineage Status |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :---: |
+| **`all_routes_stops.csv`** | CSV (Flat Delimited) | 12,909 rows, 24 columns, natural key `routepartid` | `route_stops` & `route_stop_coordinates_audit` | `route_stop_id` (Surrogate PK) | `source_file_id`<br>`source_row_number`<br>`source_routepartid` | Verify `source_routepartid` uniqueness (12,909 distinct values) before accepting mapping. Retain exact 1-based CSV line number. Page numbers and array indices do not apply. | **VERIFIED** |
+| **`all_route_timetables.csv`** | CSV (Flat Delimited) | 3,547 rows, 22 columns, natural key `tripid` | `trips` | `trip_id` (from `tripid`) | `source_file_id`<br>`source_row_number`<br>`source_tripid` | Retain exact 1-based CSV line number. `routepartid` does not exist in this source and must not be included. Page numbers and array indices do not apply. | **VERIFIED** |
+| **`citylinc_timetables.json`** | JSON (Hierarchical Array) | 120 top-level route objects; formatted departure strings per direction | `route_departures` | `departure_id` (Surrogate PK) | `source_file_id`<br>`source_route_array_index`<br>`source_direction_field`<br>`source_departure_token_index`<br>`raw_departure_string`<br>`occurrence_index` | Both `source_route_array_index` (0–119) and `source_departure_token_index` are required. Source position is not fully traceable if either is omitted. Deterministic `occurrence_index` assigned via window rank without default. | **VERIFIED** |
+| **`all_routes_stops.json`** | JSON (Nested Object Hierarchy) | 315 routes; nested `stops` array; nested `timetable` array | Direct JSON Ingestion Staging / Validation | N/A (Validated 1:1 against CSVs) | `source_file_id`<br>`source_route_array_index`<br>`source_stop_array_index`<br>`source_timetable_array_index` | Tracks hierarchical element index within the nested JSON tree. Timetable array index only applies to embedded timetable items. | **VERIFIED** |
+| **`bus_stop.json`** | JSON (Reference Extract) | 10 sample trunk routes; nested `stops` string list | Auxiliary Reference Staging | N/A | `source_file_id`<br>`source_route_array_index`<br>`source_stop_array_index` | Auxiliary reference only. Lineage restricted to route index (0–9) and stop sequence index. | **VERIFIED** |
+| **`bus_passes.json`** | JSON (Keyed Dictionary) | Single root `"passes"`; 3 named scheme dictionaries; nested `"options"` arrays | `pass_types` & `pass_options` | `pass_type_code`<br>`option_id` | `source_file_id`<br>`source_pass_scheme_key`<br>`source_option_array_index` | Lineage anchors to the object key (`"student_pass"`, `"open_ended_pass"`, `"fixed_route_pass"`) and 0-based array index of each option item. | **VERIFIED** |
+| **`fare_matrix.pdf`** | PDF Document | Visual table: 32 distance slabs, Page 1 | `fare_stage_rates` | `fare_stage_id` (Surrogate PK) | `source_file_id`<br>`source_page_number`<br>`source_table_name`<br>`source_row_index`<br>`source_slab_label` | Page number fixed at `1`. Table name designated `"bhadewadh_takhta"`. Row index 1 to 32. Original slab string preserved verbatim in `source_slab_label`. File line numbers do not apply. | **VERIFIED** |
+| **`New Fare Passes.pdf`** | PDF Document | Visual tables: Revised passes, concessions, Page 1 | `fare_concession_policies` & `route_pass_rates` | `policy_id`<br>`route_pass_id` | `source_file_id`<br>`source_page_number`<br>`source_table_name`<br>`source_category_clause` | Page number fixed at `1`. Table names: `"PASSES"`, `"STUDENT_PASS"`, `"ROUTE_SPECIFIC_PASS"`, `"FARE_CONCESSIONS"`. Categorized by clause (`"Clause A"`, `"Clause B"`, `"Companion"`, `"Kids"`). | **VERIFIED** |
+
+---

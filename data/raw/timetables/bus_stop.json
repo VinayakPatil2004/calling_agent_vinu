@@ -1,0 +1,215 @@
+[
+  {
+    "route_no": "101",
+    "route_name": "Tapovan To Gangapur Gaon Via Civil Satpur Ashok Nagar",
+    "stops": [
+      "Tapovan Terminus",
+      "Tapovan",
+      "CH. Sambhaji Maharaj Naka",
+      "Panchavati Depot Corner",
+      "Old Adgaon Naka",
+      "Nimani Bus Stand",
+      "Panchavati Karanja",
+      "Malegaon Stand",
+      "Ravivar Karanja",
+      "Red Cross Signal",
+      "Shalimar",
+      "CBS",
+      "Civil Hospital",
+      "Ved Mandir",
+      "Panchayat Samiti",
+      "Dudh Dairy",
+      "Maharashtra Police Academy (M.P.A)",
+      "A.B.B Circle",
+      "ITI (Satpur)",
+      "Ujjwal Agency",
+      "Satpur Police Station / Sakal Office",
+      "Satpur Manpa Vibhagiya Karyalaya",
+      "ESI Hospital",
+      "Satpur Bus Stand",
+      "Manpa Davakhana / Maharashtra Housing Colony Phata",
+      "Chhatrapati Shivaji Maharaj Vidyalaya",
+      "Satpur Colony",
+      "Samta Nagar",
+      "Anand Chhaya",
+      "Savarkar Nagar",
+      "Rajya Karmachari Society",
+      "Police Chowki (Ashok Nagar)",
+      "Ashok Nagar",
+      "New Mahindra Gate",
+      "Shramik Nagar",
+      "Carbon Naka",
+      "Chhatrapati Shivaji Maharaj Nagar (Bardan Phata Road)",
+      "Dhruv Nagar",
+      "Motiwala College",
+      "Bardan Phata",
+      "Balaji Mandir",
+      "Gangapur Gaon"
+    ]
+  },
+  {
+    "route_no": "103",
+    "route_name": "Tapovan To Symbiosis college Via CBS Trimurti Chowk Uttam Nagar",
+    "stops": [
+      "Tapovan Depot",
+      "Tapovan",
+      "Old Adgaon Naka",
+      "Panchavati Karanja",
+      "CBS",
+      "Mahamarg Bus Stand",
+      "Mumbai Naka",
+      "Lekha Nagar",
+      "Trimurti Chowk",
+      "CIDCO Uttam Nagar",
+      "Symbiosis College"
+    ]
+  },
+  {
+    "route_no": "104",
+    "route_name": "Tapovan Depot To Pathardi Gaon Via Nagji Indira Nagar Vanvaibhav",
+    "stops": [
+      "Tapovan Depot",
+      "Dwarka Junction",
+      "Nagji Hospital",
+      "Indira Nagar Jogging Track",
+      "Rajiv Nagar",
+      "Vanvaibhav Colony",
+      "Pathardi Gaon"
+    ]
+  },
+  {
+    "route_no": "106",
+    "route_name": "Tapovan To Swapnapurti Nagar Via Kamod Nagar Vasan Nagar Pathardi Phata",
+    "stops": [
+      "Tapovan Depot",
+      "Tapovan",
+      "CH. Sambhaji Maharaj Naka",
+      "Panchavati Depot Corner",
+      "Old Adgaon Naka",
+      "Kathe Galli Signal",
+      "Dwarka Junction",
+      "Dwarka Circle / Circle Cinema",
+      "Mumbai Naka",
+      "New CBS (Mico Circle)",
+      "Tidke Colony",
+      "Mahamarg Bus Stand",
+      "Chetana Nagar",
+      "Rane Nagar",
+      "Indira Nagar / Govind Nagar Signal",
+      "Kamod Nagar",
+      "Vasan Nagar",
+      "Pathardi Phata",
+      "Swapnapurti Nagar"
+    ]
+  },
+  {
+    "route_no": "106",
+    "route_name": "Swapnapurti Nagar To Tapovan Via Pathardi Phata Vasan Nagar Kamod Nagar",
+    "stops": [
+      "Swapnapurti Nagar",
+      "Pathardi Phata",
+      "Vasan Nagar",
+      "Kamod Nagar",
+      "Indira Nagar / Govind Nagar Signal",
+      "Rane Nagar",
+      "Chetana Nagar",
+      "Mahamarg Bus Stand",
+      "Tidke Colony",
+      "New CBS (Mico Circle)",
+      "Mumbai Naka",
+      "Dwarka Circle / Circle Cinema",
+      "Dwarka Junction",
+      "Kathe Galli Signal",
+      "Old Adgaon Naka",
+      "Panchavati Depot Corner",
+      "CH. Sambhaji Maharaj Naka",
+      "Tapovan",
+      "Tapovan Depot"
+    ]
+  },
+  {
+    "route_no": "106C",
+    "route_name": "Tapovan To Kendriya Vidyalay (Vadner) Via Lekha Nagar",
+    "stops": [
+      "Tapovan Depot",
+      "Tapovan",
+      "CH. Sambhaji Maharaj Naka",
+      "Panchavati Depot Corner",
+      "Old Adgaon Naka",
+      "Kathe Galli Signal",
+      "Dwarka Junction",
+      "Mumbai Naka",
+      "New CBS (Mico Circle)",
+      "Mahamarg Bus Stand",
+      "Lekha Nagar",
+      "Pathardi Gaon",
+      "Kendriya Vidyalay (Vadner)"
+    ]
+  },
+  {
+    "route_no": "106C",
+    "route_name": "Kendriya Vidyalay (Vadner) To Tapovan Via Pathardi Gaon",
+    "stops": [
+      "Kendriya Vidyalay (Vadner)",
+      "Pathardi Gaon",
+      "Lekha Nagar",
+      "Mahamarg Bus Stand",
+      "New CBS (Mico Circle)",
+      "Mumbai Naka",
+      "Dwarka Junction",
+      "Kathe Galli Signal",
+      "Old Adgaon Naka",
+      "Panchavati Depot Corner",
+      "CH. Sambhaji Maharaj Naka",
+      "Tapovan",
+      "Tapovan Depot"
+    ]
+  },
+  {
+    "route_no": "106G",
+    "route_name": "Tapovan To Amruta Nagar Via CBS Mahmarg Chetana Nagar Gamane Kridangan Vikrikar Bhavan",
+    "stops": [
+      "Tapovan Depot",
+      "Tapovan",
+      "CH. Sambhaji Maharaj Naka",
+      "Panchavati Depot Corner",
+      "Old Adgaon Naka",
+      "Kathe Galli Signal",
+      "Dwarka Junction",
+      "Mumbai Naka",
+      "New CBS (Mico Circle)",
+      "Mahamarg Bus Stand",
+      "Chetana Nagar",
+      "Gamane Kridangan",
+      "Vikrikar Bhavan",
+      "Amruta Nagar"
+    ]
+  },
+  {
+    "route_no": "107",
+    "route_name": "Tapovan To Ambad Gaon Via Mahamarg Lekha Nagar Garware",
+    "stops": [
+      "Tapovan Depot",
+      "Dwarka Circle",
+      "Mumbai Naka",
+      "Mahamarg Bus Stand",
+      "Lekha Nagar",
+      "Garware Point",
+      "Ambad Gaon"
+    ]
+  },
+  {
+    "route_no": "145",
+    "route_name": "Tapovan To Trimbakeshwar Via Shalimar Mela Busstand",
+    "stops": [
+      "Tapovan Depot",
+      "Panchavati Karanja",
+      "Shalimar",
+      "CBS",
+      "Mela Bus Stand",
+      "Satpur",
+      "Belgaon Dhaga",
+      "Trimbakeshwar Bus Stand"
+    ]
+  }
+]

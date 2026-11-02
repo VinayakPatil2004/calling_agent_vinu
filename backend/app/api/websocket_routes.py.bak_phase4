@@ -1,0 +1,292 @@
+"""
+WebSocket routes for real-time bidirectional voice conversation.
+Handles microphone audio streaming, Sarvam STT, LLM context, Sarvam TTS, and barge-in / interruption.
+"""
+import base64
+import json
+import logging
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from backend.app.core.config import settings
+from backend.app.integrations.sarvam.stt import stt_client
+from backend.app.integrations.sarvam.tts import tts_client
+from backend.app.integrations.llm.client import llm_client
+from backend.app.orchestrator.conversation_manager import conversation_manager
+from backend.app.services.language_detector import language_detector
+
+logger = logging.getLogger("citylinc.ws")
+
+router = APIRouter(tags=["WebSocket"])
+
+@router.websocket("/ws/conversation")
+async def websocket_conversation_endpoint(websocket: WebSocket):
+    """
+    Real-time bidirectional WebSocket voice endpoint.
+    Communicates with browser frontend using JSON events.
+    """
+    await websocket.accept()
+    session = conversation_manager.get_or_create_session()
+    logger.info(f"WebSocket client connected. Session: {session.session_id}")
+
+    # Send initial welcome and status
+    await websocket.send_json({
+        "type": "ready",
+        "session_id": session.session_id,
+        "language": session.current_language,
+        "has_sarvam_key": settings.has_sarvam_key,
+        "message": "Connected to CityLinc Multilingual Voice Agent."
+    })
+
+    try:
+        while True:
+            raw_data = await websocket.receive_text()
+            try:
+                event = json.loads(raw_data)
+            except json.JSONDecodeError:
+                await websocket.send_json({"type": "error", "message": "Invalid JSON payload"})
+                continue
+
+            event_type = event.get("type", "")
+
+            # 1. Ping / Keep-alive
+            if event_type == "ping":
+                await websocket.send_json({"type": "pong"})
+                continue
+
+            # 2. Interruption / Barge-in
+            if event_type in ("interrupt", "user_speaking"):
+                target_turn = event.get("turn_id")
+                turn_id = session.interrupt(turn_id=target_turn)
+                logger.info(f"Received user interruption for turn {target_turn}. Session advanced to: {turn_id}")
+                await websocket.send_json({
+                    "type": "interrupted",
+                    "turn_id": turn_id,
+                    "status": "listening"
+                })
+                continue
+
+            # 3. Reset conversation context
+            if event_type == "reset":
+                session.reset()
+                await websocket.send_json({
+                    "type": "status",
+                    "status": "idle",
+                    "message": "Conversation context reset."
+                })
+                continue
+
+            # 4. Incoming Voice Audio payload
+            if event_type == "audio":
+                b64_audio = event.get("data", "")
+                raw_format = event.get("format", "audio/webm")
+                audio_format = raw_format.split(";")[0].strip().lower() if raw_format else "audio/webm"
+                req_lang = event.get("language", "auto")
+
+                if not b64_audio:
+                    continue
+
+                try:
+                    audio_bytes = base64.b64decode(b64_audio)
+                    logger.info(f"Received audio from client: {len(audio_bytes)} bytes | format: {audio_format} (raw: {raw_format}) | client_lang_mode: {req_lang}")
+                except Exception as e:
+                    logger.error(f"Failed to decode base64 audio: {e}")
+                    await websocket.send_json({"type": "error", "message": "Corrupted audio data"})
+                    continue
+
+                # Notify client: Transcribing speech
+                await websocket.send_json({
+                    "type": "status",
+                    "status": "thinking",
+                    "stage": "stt",
+                    "bytes_received": len(audio_bytes)
+                })
+
+                # Step 1: Sarvam STT Transcription
+                # Pass language_code='unknown' for auto-detection unless client specifically locked a language
+                stt_req_lang = req_lang if req_lang in ("mr-IN", "hi-IN", "en-IN") else "unknown"
+                try:
+                    stt_result = await stt_client.transcribe(
+                        audio_bytes=audio_bytes,
+                        language_code=stt_req_lang,
+                        mime_type=audio_format
+                    )
+                except Exception as e:
+                    logger.error(f"STT error: {e}")
+                    await websocket.send_json({"type": "error", "message": f"STT error: {str(e)}"})
+                    await websocket.send_json({"type": "status", "status": "idle"})
+                    continue
+
+                transcript = stt_result.get("transcript", "").strip()
+                sarvam_acoustic_lang = stt_result.get("language_code", "unknown")
+
+                if not transcript:
+                    logger.info(f"Empty transcript returned from Sarvam for {len(audio_bytes)} bytes audio.")
+                    await websocket.send_json({
+                        "type": "info",
+                        "message": "No clear speech detected. Please speak closer to the microphone in Marathi, Hindi, or English."
+                    })
+                    await websocket.send_json({"type": "status", "status": "listening"})
+                    continue
+
+                # Multi-layered language detection combining acoustic STT + lexical analysis + context
+                det_result = language_detector.detect(
+                    text=transcript,
+                    stt_language=sarvam_acoustic_lang,
+                    context_language=session.current_language,
+                    user_preference=req_lang if req_lang in ("mr-IN", "hi-IN", "en-IN") else None
+                )
+                detected_lang = det_result.language
+
+                logger.info(f"Speech transcribed: '{transcript}' -> Detected Lang: {detected_lang} (conf: {det_result.confidence:.2f}, reason: {det_result.reason})")
+
+                is_lang_switched = (detected_lang != session.current_language)
+                if is_lang_switched:
+                    logger.info(f"Language switched dynamically: {session.current_language} -> {detected_lang}")
+
+                # Send User transcript to UI
+                await websocket.send_json({
+                    "type": "transcript",
+                    "role": "user",
+                    "text": transcript,
+                    "language": detected_lang,
+                    "language_switched": is_lang_switched,
+                    "previous_language": session.current_language
+                })
+
+                # Register message in session (updates session.current_language to detected_lang while preserving history)
+                current_turn = session.add_user_message(transcript, language=detected_lang)
+
+                # Check if user interrupted while we were processing
+                if session.is_interrupted or current_turn != session.current_turn_id:
+                    logger.info(f"Turn {current_turn} canceled due to interruption.")
+                    continue
+
+                # Step 2: Handle Low-Confidence / Clarification
+                if det_result.confidence < 0.4 and len(transcript) < 3:
+                    clarification = {
+                        "mr-IN": "मला स्पष्ट समजले नाही. कृपया बस क्रमांक, वेळ किंवा पासबद्दल पुन्हा सांगा.",
+                        "hi-IN": "मुझे स्पष्ट समझ नहीं आया। कृपया बस नंबर, समय या पास के बारे में फिर से बताएं।",
+                        "en-IN": "I could not hear clearly. Could you please repeat your query about routes, timings, or passes?"
+                    }.get(detected_lang, "मला स्पष्ट समजले नाही. कृपया पुन्हा सांगा.")
+                    reply = clarification
+                else:
+                    # Normal LLM Completion
+                    await websocket.send_json({"type": "status", "status": "thinking", "stage": "llm"})
+                    try:
+                        reply = await llm_client.generate_response(session.history, language_code=detected_lang)
+                    except Exception as e:
+                        logger.error(f"LLM generation error: {e}")
+                        reply = "I apologize, I encountered an issue retrieving the information. Please ask again."
+
+                # Check interruption after LLM
+                if session.is_interrupted or current_turn != session.current_turn_id:
+                    logger.info(f"Turn {current_turn} interrupted after LLM.")
+                    continue
+
+                # Send Assistant transcript to UI
+                await websocket.send_json({
+                    "type": "transcript",
+                    "role": "assistant",
+                    "text": reply,
+                    "language": detected_lang
+                })
+
+                # Step 3: Sarvam TTS Speech Synthesis
+                await websocket.send_json({"type": "status", "status": "thinking", "stage": "tts"})
+                try:
+                    tts_result = await tts_client.synthesize(
+                        text=reply,
+                        language_code=detected_lang
+                    )
+                    audio_output = tts_result.get("audio_base64", "")
+                    out_format = tts_result.get("format", "audio/mpeg")
+                    if out_format == "audio/mp3":
+                        out_format = "audio/mpeg"
+
+                    # Check interruption before sending audio
+                    if session.is_interrupted or current_turn != session.current_turn_id:
+                        logger.info(f"Turn {current_turn} canceled before sending audio.")
+                        continue
+
+                    session.add_assistant_message(reply, current_turn)
+
+                    # Send generated speech audio to client
+                    await websocket.send_json({"type": "status", "status": "speaking"})
+                    await websocket.send_json({
+                        "type": "audio",
+                        "audio": audio_output,
+                        "format": out_format,
+                        "turn_id": current_turn,
+                        "language": detected_lang
+                    })
+
+                except Exception as e:
+                    logger.error(f"TTS synthesis error: {e}")
+                    await websocket.send_json({"type": "error", "message": f"TTS synthesis error: {str(e)}"})
+                    await websocket.send_json({"type": "status", "status": "idle"})
+
+            # 5. Direct Text Input
+            elif event_type == "text":
+                text_input = event.get("text", "").strip()
+                req_lang = event.get("language", "auto")
+
+                if not text_input:
+                    continue
+
+                # Multi-layered language detection for typed text (handles Roman Marathi, Hinglish, Devanagari, English)
+                det_result = language_detector.detect(
+                    text=text_input,
+                    context_language=session.current_language,
+                    user_preference=req_lang if req_lang in ("mr-IN", "hi-IN", "en-IN") else None
+                )
+                detected_lang = det_result.language
+
+                is_lang_switched = (detected_lang != session.current_language)
+                if is_lang_switched:
+                    logger.info(f"Text language switched: {session.current_language} -> {detected_lang}")
+
+                current_turn = session.add_user_message(text_input, language=detected_lang)
+                await websocket.send_json({
+                    "type": "transcript",
+                    "role": "user",
+                    "text": text_input,
+                    "language": detected_lang,
+                    "language_switched": is_lang_switched,
+                    "previous_language": session.current_language
+                })
+
+                await websocket.send_json({"type": "status", "status": "thinking"})
+                reply = await llm_client.generate_response(session.history, language_code=detected_lang)
+
+                if session.is_interrupted or current_turn != session.current_turn_id:
+                    continue
+
+                await websocket.send_json({
+                    "type": "transcript",
+                    "role": "assistant",
+                    "text": reply,
+                    "language": detected_lang
+                })
+
+                tts_result = await tts_client.synthesize(text=reply, language_code=detected_lang)
+                session.add_assistant_message(reply, current_turn)
+
+                tts_format = tts_result.get("format", "audio/mpeg")
+                if tts_format == "audio/mp3":
+                    tts_format = "audio/mpeg"
+
+                await websocket.send_json({"type": "status", "status": "speaking"})
+                await websocket.send_json({
+                    "type": "audio",
+                    "audio": tts_result.get("audio_base64", ""),
+                    "format": tts_format,
+                    "turn_id": current_turn,
+                    "language": detected_lang
+                })
+
+    except WebSocketDisconnect:
+        logger.info(f"WebSocket client disconnected: {session.session_id}")
+    except Exception as e:
+        logger.error(f"WebSocket exception: {e}", exc_info=True)
+    finally:
+        conversation_manager.remove_session(session.session_id)
+

@@ -1,0 +1,212 @@
+# CityLinc AI Calling Agent — Controlled Data Cleaning Plan
+
+**Document ID:** `DATA_CLEANING_PLAN.md`  
+**Phase:** P0.2 — Final Database Design Specification (Post-Review Revision 2)  
+**Status:** PROPOSAL / AWAITING OPERATOR APPROVAL  
+**Classification:** Transit Data Engineering Standard Operating Procedure  
+**Execution Gate:** LOCKED UNTIL PHASE 2 WRITTEN APPROVAL
+
+---
+
+## 1. Governance Principles & Strict Guardrails
+
+This cleaning plan defines the controlled, auditable, non-destructive transformation pipeline to transition raw CityLinc transit data into a production-grade relational PostgreSQL database.
+
+### Mandatory Rules for Phase 2 Execution:
+1. **Zero Raw Mutation:** Raw files in `data/raw/` must **never** be edited, renamed, overwritten, or deleted.
+2. **Dual-Layer Architecture:** All transformations operate through an intermediate staging layer (`stg_*`) before loading normalized production tables (`public.*`).
+3. **No Automatic Deletions (All 12,909 Stops Retained):** Consecutive duplicate stops (routes `6710`, `6908`, `6866`) are **never dropped from database records**. They are preserved in `route_stops` and flagged with `is_consecutive_duplicate = TRUE`. Standard production views retain all records. Duplicate suppression views are strictly optional and operator-dependent.
+4. **Preservation of IDs & Lineage:** All original IDs (`routeid`, `stationid`, `displaystationid`, `routepartid`, `tripid`) and source numbers (`source_rno`, `source_routeno`) must be preserved independently without global renaming collisions.
+5. **Flexible & Safe Fare Constraints:** Raw `stationfare` (`'0'`) is preserved in `raw_stationfare`. Unverified fares remain `NULL` under `fare_verification_status = 'UNVERIFIED'`. Legitimate zero fares are explicitly permitted under `fare_verification_status = 'VERIFIED_ZERO_FARE'` when verified by operators.
+6. **Fidelity to Timetable Semantics:** Field names `source_eta` and `source_arrival_at_destination` preserve source column identities (`eta`, `arrivalatdestination`) without making unsupported assumptions.
+7. **No Fabricated Data:** Unknown trip status codes, missing eligibility criteria, and unverified coordinates must be retained as raw attributes without inventing meanings.
+
+---
+
+## 2. Three-Stage Processing Architecture
+
+```text
+[ data/raw/ Source Files ]
+         │
+         ▼  (Stage 1: Lossless Raw Ingestion)
+[ stg_routes, stg_route_stops, stg_trips, stg_timetables, stg_passes ]
+   - All columns preserved as text/native types
+   - Source lineage and import_batch_id tagged
+         │
+         ▼  (Stage 2: Validation & Anomaly Flagging)
+[ Staging Validation Procedures ]
+   - Flag consecutive duplicates: is_consecutive_duplicate = TRUE
+   - Flag cross-midnight trips: is_next_day_arrival = TRUE
+   - Calculate coordinate distance deltas
+   - Validate foreign key referential integrity
+         │
+         ▼  (Stage 3: Controlled Normalized Promotion)
+[ Production Normalized Schema: routes, stations, route_stops, trips, passes ]
+   - Clean column types and check constraints
+   - Standard views include 100% of records
+   - Optional deduplication views clearly labeled as approval-dependent
+   - Indexed for low-latency FastAPI / Dograh calling queries
+```
+
+---
+
+## 3. Detailed Domain Transformation Procedures
+
+### 3.1 Procedure CLP-001: Timetable Header Deduplication
+- **Input:** `all_route_timetables.csv` (contains duplicate headers: `routeid`, `routeno`, `routename`).
+- **Transformation:**
+  - Read stream using positional indexing rather than naive dictionary mapping.
+  - Map Column 0 → `stg_trips.source_route_id`
+  - Map Column 1 → `stg_trips.source_timetable_routeno`
+  - Map Column 2 → `stg_trips.source_timetable_rno`
+  - Map Column 3 → `stg_trips.source_route_name`
+  - Ignore duplicate columns 16, 17, and 18 after asserting equality:
+    $$\text{ASSERT}(r[0] == r[18]),\quad \text{ASSERT}(r[1] == r[17]),\quad \text{ASSERT}(r[3] == r[16])$$
+- **Lineage:** Preserved in import batch logs.
+
+---
+
+### 3.2 Procedure CLP-002: Independent Route Identifier Preservation
+- **Input:** `routeid`, `routeno`, `rno`, `routename`, `displayfullroutename`.
+- **Transformation:**
+  - `routeid` $\rightarrow$ `routes.route_id` (Primary Key, Integer).
+  - `rno` (route registry) $\rightarrow$ `routes.source_rno` (Customer-facing line number, e.g., `"101"`, `"129I"`).
+  - `routeno` (route registry) $\rightarrow$ `routes.source_routeno` (Integer category: 3, 4, 6).
+  - `routes.route_code` $\rightarrow$ Generated alias: `STORED GENERATED ALWAYS AS (source_rno)`.
+  - `routetype` $\rightarrow$ `routes.direction` (`VARCHAR(8)`, validated by check constraint: `IN ('Up', 'Down')`).
+  - `routename` $\rightarrow$ `routes.corridor_name` (`VARCHAR(255)`).
+  - `displayfullroutename` $\rightarrow$ `routes.full_display_name` (`VARCHAR(255)`).
+
+---
+
+### 3.3 Procedure CLP-003: Physical vs. Logical Station Separation
+- **Input:** `stationid`, `displaystationid`, `stationname`, `displayname`.
+- **Transformation:**
+  - Step 1: Create or update logical stations:
+    - Primary Key: `logical_stations.display_station_id` $\leftarrow$ `displaystationid`.
+    - `logical_stations.station_name` $\leftarrow$ `TRIM(displayname)`.
+  - Step 2: Create physical platform stations:
+    - Primary Key: `stations.station_id` $\leftarrow$ `stationid`.
+    - Foreign Key: `stations.display_station_id` $\leftarrow$ `displaystationid`.
+    - `stations.platform_name_raw` $\leftarrow$ `TRIM(stationname)`.
+    - Determine platform direction from suffix:
+      - If `stationname` ends with `'(U)'` $\rightarrow$ `platform_direction = 'Up'`.
+      - If `stationname` ends with `'(D)'` $\rightarrow$ `platform_direction = 'Down'`.
+      - Else $\rightarrow$ `platform_direction = 'Bidirectional'`.
+
+---
+
+### 3.4 Procedure CLP-004: Consecutive Duplicate Stop Flagging (No Default Suppression)
+- **Input:** `all_routes_stops.csv` (`routeid`, `srno`, `stationid`, `routepartid`).
+- **Policy:** In accordance with Critical Correction 1, **zero stops are deleted and zero stops are silently excluded by default**.
+- **Transformation:**
+  - In `stg_route_stops`, calculate lag of `stationid` partitioned by `routeid` ordered by `srno`:
+    $$\text{is\_consecutive\_duplicate} = (\text{stationid} == \text{LAG}(\text{stationid})\text{ OVER } (\text{PARTITION BY routeid ORDER BY srno}))$$
+  - Flagged rows (such as the 39 duplicated pairs on route 6908 and 26 pairs on route 6866) are inserted into `route_stops` with `is_consecutive_duplicate = TRUE`.
+  - Default view `v_active_route_stops` **preserves all 12,909 records**, exposing `is_consecutive_duplicate` as a column for inspection.
+  - An optional view `v_route_stops_deduplicated_optional` is defined with filter `WHERE is_consecutive_duplicate = FALSE`, explicitly labeled as **experimental and awaiting operator sign-off**.
+
+---
+
+### 3.5 Procedure CLP-005: Coordinate Ingestion & Bounding Lineage
+- **Input:** `center_lat`, `center_lon`, `stationlat1`, `stationlong1`, `stationlat2`, `stationlong2`.
+- **Transformation:**
+  - In `stations` table:
+    - `latitude` $\leftarrow$ `center_lat::NUMERIC(10,6)`
+    - `longitude` $\leftarrow$ `center_lon::NUMERIC(10,6)`
+    - `is_provisional_coord` $\leftarrow$ `TRUE` (marking that these are approximate center points awaiting ground GPS survey).
+  - In `stg_station_coordinates_audit` table:
+    - Store all four bounding columns (`stationlat1`, `stationlong1`, `stationlat2`, `stationlong2`) verbatim to preserve complete source history.
+
+---
+
+### 3.6 Procedure CLP-006: Timetable Semantics & Midnight Crossing
+- **Input:** `tripid`, `routeid`, `vehicleno`, `trip_status`, `eta`, `arrivalatdestination`, `stationfare`, `starttrip`, `endtrip`, `stopname`.
+- **Transformation:**
+  - `tripid` $\rightarrow$ `trips.trip_id` (Primary Key, Integer).
+  - `routeid` $\rightarrow$ `trips.route_id` (Foreign Key referencing `routes.route_id`).
+  - `vehicleno` $\rightarrow$ Insert into `vehicles.registration_number` ON CONFLICT DO NOTHING; link foreign key `trips.vehicle_id`.
+  - `trip_status` $\rightarrow$ `trips.trip_status_code` (`INT`).
+  - `eta` $\rightarrow$ `trips.source_eta` (`TIME`) and `trips.raw_eta_text` (`VARCHAR(16)`).
+  - `arrivalatdestination` $\rightarrow$ `trips.source_arrival_at_destination` (`TIME`) and `trips.raw_arrival_text` (`VARCHAR(16)`).
+  - `starttrip`, `endtrip`, `stopname` $\rightarrow$ `source_start_station_name`, `source_end_station_name`, `source_stop_name`.
+  - Duration Calculation:
+    - $\Delta = \text{source\_arrival\_at\_destination} - \text{source\_eta}$
+    - If $\Delta < 0$:
+      - `is_next_day_arrival` $\leftarrow$ `TRUE`
+      - `scheduled_duration_mins` $\leftarrow$ $(\Delta + 24\text{ hours})::\text{minutes}$
+    - Else:
+      - `is_next_day_arrival` $\leftarrow$ `FALSE`
+      - `scheduled_duration_mins` $\leftarrow$ $\Delta::\text{minutes}$
+
+---
+
+### 3.7 Procedure CLP-007: Fare Field Handling & Verification Status
+- **Input:** `stationfare` (numeric `0` in source).
+- **Transformation:**
+  - `trips.raw_stationfare` $\leftarrow$ `'0'`.
+  - `trips.fare_amount` $\leftarrow$ `NULL::NUMERIC(8,2)`.
+  - `trips.fare_verification_status` $\leftarrow$ `'UNVERIFIED'`.
+  - Guardrail: Constraint `chk_fare_verification` permits:
+    - `UNVERIFIED` $\rightarrow$ `fare_amount IS NULL`
+    - `UNAVAILABLE` $\rightarrow$ `fare_amount IS NULL`
+    - `VERIFIED_PAID` $\rightarrow$ `fare_amount > 0`
+    - `VERIFIED_ZERO_FARE` $\rightarrow$ `fare_amount = 0` (Legitimate free fare officially approved).
+
+---
+
+### 3.8 Procedure CLP-008: Pass Scheme Structuring
+- **Input:** `bus_passes.json`.
+- **Transformation:**
+  - Master pass records $\rightarrow$ `pass_types`: `STUDENT`, `OPEN_ENDED`, `FIXED_ROUTE`.
+  - Pass options $\rightarrow$ `pass_options`:
+    - `amount_inr` $\rightarrow$ `price_inr`, `concession_type = 'FLAT_PRICE'`.
+    - `%` in concession $\rightarrow$ `concession_percentage`, `concession_type = 'PERCENTAGE'`.
+    - `'Days Fare'` in concession $\rightarrow$ `concession_fare_days`, `concession_type = 'FARE_DAYS'`.
+    - Original string $\rightarrow$ `raw_concession_text`.
+
+---
+
+### 3.9 Procedure CLP-009: Aggregate Timetable Normalization
+- **Input:** `citylinc_timetables.json`.
+- **Transformation:**
+  - Extract departure times via regex `([0-2][0-9]:[0-5][0-9])`.
+  - Insert discrete records into `route_departures` with unique constraint `(route_code, direction, departure_time)`.
+
+---
+
+## 4. Phase 2 Pre-Promotion Validation Gate
+
+Before promoting data from Staging (`stg_*`) to Production tables (`public.*`), the following SQL verification assertions must pass with 0 errors:
+
+```sql
+-- Assertion 1: Zero Route Loss
+SELECT COUNT(*) FROM stg_routes; -- Must equal 315
+SELECT COUNT(*) FROM routes;     -- Must equal 315
+
+-- Assertion 2: Zero Stop Loss (All 12,909 Stops Retained)
+SELECT COUNT(*) FROM stg_route_stops; -- Must equal 12909
+SELECT COUNT(*) FROM route_stops;     -- Must equal 12909
+
+-- Assertion 3: Zero Trip Loss
+SELECT COUNT(*) FROM stg_trips; -- Must equal 3547
+SELECT COUNT(*) FROM trips;     -- Must equal 3547
+
+-- Assertion 4: Referential Integrity
+SELECT COUNT(*) FROM trips WHERE route_id NOT IN (SELECT route_id FROM routes); -- Must be 0
+
+-- Assertion 5: Unverified Fare Safety (Must NOT be treated as zero or free)
+SELECT COUNT(*) FROM trips WHERE fare_verification_status = 'UNVERIFIED' AND fare_amount IS NOT NULL; -- Must be 0
+
+-- Assertion 6: Consecutive Duplicate Flag Count (Flagged, NOT deleted)
+SELECT COUNT(*) FROM route_stops WHERE is_consecutive_duplicate = TRUE; -- Must be 66 (1 in 6710, 39 in 6908, 26 in 6866)
+```
+
+---
+
+## 5. Rollback & Recovery Strategy
+
+If any assertion fails during Phase 2:
+1. All staging-to-production promotion scripts run within a single transaction (`BEGIN ... ROLLBACK`).
+2. Staging tables reside in schema `staging` and can be safely truncated without affecting raw or production assets.
+3. Raw data in `data/raw/` remains untouched throughout the entire process.

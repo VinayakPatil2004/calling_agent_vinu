@@ -1,0 +1,223 @@
+# CityLinc AI Calling Agent — Comprehensive Data Profiling Report
+
+**Document ID:** `DATA_PROFILING_REPORT.md`  
+**Phase:** P0.2 — Final Database Design Specification  
+**Status:** DRAFT / APPROVED FOR DESIGN  
+**Classification:** Internal Transit Engineering Specification  
+**Operating Mode:** Read-Only Audit & Schema Architecture (Zero Mutations)
+
+---
+
+## 1. Executive Summary
+
+This profiling report presents the quantitative and structural baseline of all six source data files provided for the CityLinc Nashik AI Calling Agent. The data assets encompass public transit routes, stop sequences, station coordinates, timetable departure schedules, fleet vehicles, and fare pass schemes.
+
+The audit was conducted strictly non-destructively. Every record count, column profile, distinct cardinality, null distribution, and cross-dataset relation was computed directly from raw sources without modifying, sanitizing, or dropping any underlying records.
+
+---
+
+## 2. Source Dataset Catalog
+
+| # | File Name | Full Path | File Size (Bytes) | Format | Encoding / BOM | Total Records | Primary Entities |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **1** | `all_routes_stops.json` | `data/raw/all_routes_stops.json` | 7,598,396 | JSON (Array) | UTF-8 / No BOM | 315 routes | Routes, Stop Sequences, Embedded Timetables |
+| **2** | `all_routes_stops.csv` | `data/raw/all_routes_stops.csv` | 5,599,018 | CSV (Delimited) | UTF-8 / No BOM | 12,909 rows | Flattened Route-Stop Sequences & Coordinates |
+| **3** | `all_route_timetables.csv` | `data/raw/all_route_timetables.csv` | 1,658,742 | CSV (Delimited) | UTF-8 / No BOM | 3,547 rows | Trip Schedules, Assigned Vehicles, ETAs |
+| **4** | `citylinc_timetables.json` | `data/raw/citylinc_timetables.json` | 54,814 | JSON (Array) | UTF-8 / No BOM | 120 items | Aggregate Route Departure Strings |
+| **5** | `bus_stop.json` | `data/raw/bus_stop.json` | 5,376 | JSON (Array) | UTF-8 / No BOM | 10 items | Sample Directional Stop Sequences |
+| **6** | `bus_passes.json` | `data/raw/bus_passes.json` | 1,317 | JSON (Object) | UTF-8 / No BOM | 3 schemes | Pass Categories, Durations, Concessions |
+
+---
+
+## 3. Detailed Dataset Profiling
+
+### 3.1 `all_routes_stops.json`
+- **Root Element:** JSON Array containing 315 route objects.
+- **Top-Level Keys per Object:**
+  - `routeid` (Integer): Unique internal system identifier (Range: `5463` – `7016`, Distinct: 315).
+  - `routeno` (Integer): Operational category code (Values: `3` [170], `4` [141], `6` [4]; Distinct: 3).
+  - `rno` (String): Public passenger line code (e.g., `"101"`, `"129I"`, `"328T"`; Distinct: 121).
+  - `routename` (String): Formal route corridor text (Distinct: 254).
+  - `route_name` (String): Duplicate corridor text matching `routename`.
+  - `route_name_wb` (String): Corridor text prefixed with route line number (Distinct: 254).
+  - `displayfullroutename` (String): Corridor text prefixed with line and direction (e.g., `"101-Up : Tapovan To Gangapur Gaon..."`; Distinct: 315).
+  - `fromstation` (Integer): Origin station physical ID (Distinct: 93).
+  - `tostation` (Integer): Destination station physical ID (Distinct: 92).
+  - `routetype` (String): Operational direction (`"Up"`: 158 routes; `"Down"`: 157 routes).
+  - `stop_count` (Integer): Number of stops configured for route (Min: 7, Max: 105, Mean: 41.0).
+  - `stops` (Array of Objects): 12,909 total stop sequence instances across all routes.
+  - `geometry_count` (Integer): Polyline coordinate points count (Total across routes: 278,072 points).
+  - `timetable_count` (Integer): Count of trips scheduled for this route.
+  - `timetable` (Array of Objects): Embedded trip objects (Total: 3,547 trips across 311 routes; 4 routes have 0).
+
+- **Nested `stops` Schema:**
+  - `routepartid` (Integer): Unique sequence point identifier (Range: `36981` – `51410`, Distinct: 12,909).
+  - `srno` (String): Stop ordinal number (`"1"`, `"2"`, ...).
+  - `totaldistance` (String): Cumulative distance in kilometers from origin stop.
+  - `stationid` (Integer): Physical stop identifier (Distinct: 1,187).
+  - `stationname` (String): Station name, typically suffixed with directional tag (Distinct: 1,187).
+  - `displaystationid` (Integer): Logical station identifier (Distinct: 786).
+  - `displayname` (String): Clean station name without directional suffixes (Distinct: 786).
+  - `center_lat`, `center_lon` (Float): Stop center coordinate point.
+  - `stationlat1`, `stationlong1`, `stationlat2`, `stationlong2` (Float): Bounding box coordinates.
+
+---
+
+### 3.2 `all_routes_stops.csv`
+- **Total Rows:** 12,909 rows. Exactly matches the flattened stop count of `all_routes_stops.json`.
+- **Columns (24 total):**
+
+| Column Name | Inferred SQL Type | Null Count | Distinct Count | Sample Value | Notes |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `routeid` | `INTEGER` | 0 | 315 | `5463` | Unique route ID |
+| `routeno` | `INTEGER` | 0 | 3 | `3` | Internal category code |
+| `rno` | `VARCHAR(32)` | 0 | 121 | `101` | Public line number |
+| `routename` | `VARCHAR(255)` | 0 | 254 | `Tapovan To Gangapur Gaon...` | Corridor description |
+| `route_name` | `VARCHAR(255)` | 0 | 254 | `Tapovan To Gangapur Gaon...` | Redundant route text |
+| `route_name_wb` | `VARCHAR(255)` | 0 | 254 | `101 - Tapovan To Gangapur...`| Prefixed with line |
+| `displayfullroutename`| `VARCHAR(255)` | 0 | 315 | `101-Up : Tapovan To...` | Full unique corridor name |
+| `fromstation` | `INTEGER` | 0 | 93 | `1906` | Origin physical stop ID |
+| `tostation` | `INTEGER` | 0 | 92 | `1560` | Terminus physical stop ID |
+| `routetype` | `VARCHAR(16)` | 0 | 2 | `Up` | Direction (`Up` / `Down`) |
+| `stop_count` | `INTEGER` | 0 | 56 | `38` | Stop count on route |
+| `routepartid` | `INTEGER` | 0 | 12,909 | `36981` | Unique sequence ID |
+| `srno` | `INTEGER` | 0 | 105 | `1` | Ordinal stop sequence |
+| `totaldistance` | `NUMERIC(8,2)` | 0 | 818 | `0` | Cumulative km from origin |
+| `stationid` | `INTEGER` | 0 | 1,187 | `1906` | Physical platform stop ID |
+| `stationname` | `VARCHAR(255)` | 0 | 1,187 | `Tapovan Terminus` | Platform name with direction |
+| `displaystationid`| `INTEGER` | 0 | 786 | `1551` | Logical station grouping ID |
+| `displayname` | `VARCHAR(255)` | 0 | 786 | `Tapovan Terminus` | Passenger display station name |
+| `center_lat` | `NUMERIC(10,6)`| 0 | 1,154 | `20.007810` | Provisional stop latitude |
+| `center_lon` | `NUMERIC(10,6)`| 0 | 1,162 | `73.814210` | Provisional stop longitude |
+| `stationlat1` | `NUMERIC(10,6)`| 0 | 1,154 | `20.057810` | Synthetic bbox: `center_lat + 0.05` |
+| `stationlong1`| `NUMERIC(10,6)`| 0 | 1,162 | `73.764210` | Synthetic bbox: `center_lon - 0.05` |
+| `stationlat2` | `NUMERIC(10,6)`| 0 | 1,154 | `19.957810` | Synthetic bbox: `center_lat - 0.05` |
+| `stationlong2`| `NUMERIC(10,6)`| 0 | 1,162 | `73.864210` | Synthetic bbox: `center_lon + 0.05` |
+
+---
+
+### 3.3 `all_route_timetables.csv`
+- **Total Rows:** 3,547 rows.
+- **Raw Header Columns (22 total):**  
+  `routeid`, `routeno`, `rno`, `routename`, `route_name`, `route_name_wb`, `displayfullroutename`, `fromstation`, `tostation`, `routetype`, `tripid`, `trip_status`, `starttrip`, `endtrip`, `stopname`, `vehicleno`, `routename`, `routeno`, `routeid`, `eta`, `arrivalatdestination`, `stationfare`
+- **Header Duplicate Analysis:**
+  - Index 0 (`routeid`) vs Index 18 (`routeid`): Identical across 100% of rows (0 mismatches).
+  - Index 1 (`routeno`) vs Index 17 (`routeno`): Identical across 100% of rows (0 mismatches).
+  - Index 3 (`routename`) vs Index 16 (`routename`): Identical across 100% of rows (0 mismatches).
+  - *Observation:* Duplicate columns are the artifact of an upstream SQL JOIN between route master and trip tables.
+- **Column Profiling:**
+
+| Column Index & Name | Inferred SQL Type | Distinct | Nulls | Sample Value | Notes |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| `0: routeid` | `INTEGER` | 311 | 0 | `5463` | FK referencing route master |
+| `1: routeno` | `VARCHAR(32)` | 120 | 0 | `101` | In timetable, contains public route code! |
+| `2: rno` | `VARCHAR(32)` | 120 | 0 | `101` | Public route code (matches `routeno` here) |
+| `3: routename` | `VARCHAR(255)` | 250 | 0 | `Tapovan To Gangapur...` | Corridor name |
+| `7: fromstation` | `INTEGER` | 91 | 0 | `1906` | Origin station ID |
+| `8: tostation` | `INTEGER` | 90 | 0 | `1560` | Terminus station ID |
+| `9: routetype` | `VARCHAR(16)` | 2 | 0 | `Up` | Direction (`Up` / `Down`) |
+| `10: tripid` | `INTEGER` | 3,547 | 0 | `4834492` | Primary Key for trip |
+| `11: trip_status`| `VARCHAR(8)` | 4 | 0 | `0` | Status code (`0`, `2`, `6`, `9`) |
+| `12: starttrip` | `VARCHAR(255)` | 91 | 0 | `Tapovan Terminus` | Scheduled origin station name |
+| `13: endtrip` | `VARCHAR(255)` | 90 | 0 | `Gangapur Gaon` | Scheduled terminus station name |
+| `14: stopname` | `VARCHAR(255)` | 91 | 0 | `Tapovan Terminus` | Origin reporting stop name |
+| `15: vehicleno` | `VARCHAR(32)` | 244 | 0 | `MH-15-GV-8161` | Assigned bus registration number |
+| `19: eta` | `TIME` / `VARCHAR`| 227 | 0 | `20:15` | Scheduled departure time (`HH:MM`) |
+| `20: arrivalatdestination`| `TIME` / `VARCHAR`| 229 | 0 | `21:15` | Scheduled arrival time (`HH:MM`) |
+| `21: stationfare`| `NUMERIC(8,2)`| 1 | 0 | `0` | **Constant 0 across all 3,547 rows** |
+
+---
+
+### 3.4 `citylinc_timetables.json`
+- **Total Items:** 120 route objects.
+- **Unique Route Numbers:** 81 distinct `route_no` strings.
+- **Top-Level Keys:**
+  - `route_no` (String): e.g., `"104"`, `"201"`.
+  - `route_name` (String): Corridor description.
+  - `source_departures` (String): Composite text prefixing corridor title before colon, followed by comma-separated departure timestamps (e.g., `"Tapovan Depot To PathardiGaon...: 09:50"`).
+  - `destination_departures` (String): Composite text of return departure times.
+- **Data Quality Characteristics:**
+  - 21 records have empty strings (`""`) for `destination_departures`.
+  - Contains duplicate timestamps within single departure strings (e.g., `"08:40, 13:20, 13:20, 15:40"`).
+  - This dataset serves as a passenger-facing operational timetable summary, whereas `all_route_timetables.csv` is the granular CAD/AVL operational trip dispatch schedule.
+
+---
+
+### 3.5 `bus_stop.json`
+- **Total Items:** 10 route items.
+- **Unique Route Numbers:** 8 distinct route numbers (`101`, `102`, `103`, `104`, `105`, `106`, `106A`, `106C`).
+- **Keys:** `route_no`, `route_name`, `stops` (Array of station name strings).
+- **Duplicate Route Numbers:** `106` and `106C` each appear twice because the dataset represents both Up and Down directions as separate objects under the same route identifier without an explicit `routetype` key.
+- **Total Unique Stop Names:** 77 stop names.
+
+---
+
+### 3.6 `bus_passes.json`
+- **Root Element:** JSON object with key `"passes"`.
+- **Pass Categories Configured (3):**
+  1. `student_pass`:
+     - `name`: `"Student Pass"`
+     - `description`: `"Travel as you like in Nashik city bus"`
+     - `city`: `"Nashik"`
+     - `options`:
+       - `duration_days: 30`, `concession: "Pay 50 % Concession"`
+       - `duration_days: 90`, `concession: "Pay 66.60 % Concession"`
+  2. `open_ended_pass`:
+     - `name`: `"Open Ended Pass"`
+     - `options`:
+       - `duration_days: 1`, `amount_inr: 110`
+       - `duration_days: 7`, `amount_inr: 530`
+       - `duration_days: 30`, `amount_inr: 2100`
+       - `duration_days: 90`, `amount_inr: 5250`
+       - `duration_days: 180`, `amount_inr: 9450`
+  3. `fixed_route_pass`:
+     - `name`: `"Fixed Route Pass"`
+     - `options`:
+       - `duration_days: 30`, `concession: "Pay 20 Days Fare"`
+       - `duration_days: 90`, `concession: "Pay 50 Days Fare"`
+
+---
+
+## 4. Cross-Dataset Relational Integrity Matrix
+
+| Parent Entity | Parent Source | Child Entity | Child Source | Linking Key | Integrity Status | Findings / Discrepancies |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| Route Master | `all_routes_stops.json` | Route CSV | `all_routes_stops.csv` | `routeid` | **100% Match** | Exactly 315 routes in both; 12,909 stop sequence records match 1:1. |
+| Route Master | `all_routes_stops.json` | Trip Master | `all_route_timetables.csv` | `routeid` | **311 / 315 Matched** | 4 routes have no trips scheduled (IDs: `6625`, `6784`, `7007`, `6664`). |
+| Physical Station | `all_routes_stops.csv` | Logical Station | `all_routes_stops.csv` | `stationid` → `displaystationid` | **1,187 → 786 Matched** | 350 display stations group multiple directional physical platforms. |
+| Public Route Code | `all_routes_stops.json` | Aggregate Timetable | `citylinc_timetables.json` | `rno` ↔ `route_no` | **81 / 121 Matched** | All 81 CityLinc routes exist in Master. 40 Master routes have no summary entry. |
+| Public Route Code | `all_routes_stops.json` | Bus Stop Sample | `bus_stop.json` | `rno` ↔ `route_no` | **8 / 121 Matched** | Subset reference extract covering 8 major trunk routes. |
+
+---
+
+## 5. Review & Classification of Audit Conclusions
+
+To maintain strict scientific and engineering integrity, all conclusions from the profiling audit are classified below:
+
+### 5.1 Confirmed Facts (Mathematically & Structurally Proven)
+1. `routeid` is unique across all 315 routes.
+2. `tripid` is unique across all 3,547 scheduled trips.
+3. `routepartid` is unique across all 12,909 stop instances.
+4. `stationfare` is numeric `0` across 100% (3,547 / 3,547) of rows in `all_route_timetables.csv`.
+5. Synthetic bounding box columns (`stationlat1/2`, `stationlong1/2`) are identical to `center_lat ± 0.05` and `center_lon ± 0.05` across 100% (12,909 / 12,909) of records.
+6. Columns 0/18 (`routeid`), 1/17 (`routeno`), and 3/16 (`routename`) in `all_route_timetables.csv` are duplicate pairs with zero discrepancies.
+7. Exactly 4 routes in the route registry have zero trips in the timetable CSV.
+8. Exactly 9 trips cross midnight (`arrivalatdestination < eta`).
+
+### 5.2 Observed Patterns (High Confidence Empirical Evidence)
+1. In `all_routes_stops.json`, `routeno` takes only values `3`, `4`, and `6`, correlating with fleet depot/service type, whereas `rno` holds the public line number (`101`, `129I`). In `all_route_timetables.csv`, column `routeno` contains the public line number (`101`).
+2. Consecutive repeated stops on routes `6710`, `6908`, and `6866` appear to be upstream ETL extract duplications rather than true physical loops, as stops are paired immediately adjacently.
+3. `displaystationid` clusters directional stops (e.g., `(U)` and `(D)`) under a single passenger-facing name.
+
+### 5.3 Assumptions (Forbidden from Production Code without Operator Sign-off)
+1. Assuming `stationfare = 0` implies free travel is **strictly rejected**.
+2. Assuming `trip_status` codes (`0`, `2`, `6`, `9`) correspond to GTFS status categories (`Scheduled`, `Active`, `Cancelled`, `Completed`) is **strictly rejected**.
+3. Assuming synthetic bounding coordinates represent physical platform bounds is **strictly rejected**.
+
+### 5.4 Items Requiring CityLinc Operator Confirmation
+1. Definitive business meanings of `trip_status` codes (`0`, `2`, `6`, `9`).
+2. Definitive business meaning of `routeno` (values `3`, `4`, `6`) in `all_routes_stops.json`.
+3. Tariff distance slabs and base fares for calculating student and fixed-route concessions.
+4. Confirmation to suppress or flag consecutive duplicate stops on routes `6710`, `6908`, and `6866`.
+5. Cause for the 4 routes having zero scheduled trips.
+

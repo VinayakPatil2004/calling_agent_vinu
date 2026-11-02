@@ -1,0 +1,722 @@
+[
+    {
+        "route_no": "104",
+        "route_name": "Tapovan Depot To PathardiGaon Via Nagji Indira Nagar Vanvaibhav",
+        "source_departures": "Tapovan Depot To PathardiGaon Via Nagji Indira Nagar Vanvaibhav: 09:50",
+        "destination_departures": "PathardiGaon To Tapovan Depot Via Vanvaibhav ,Indira Nagar ,Nagji: 18:45"
+    },
+    {
+        "route_no": "147",
+        "route_name": "New CBS To Mohadi Stand Via Mhasrul Varvandi Ambe",
+        "source_departures": "New CBS To Mohadi Stand Via Mhasrul Varvandi Ambe: 08:40, 13:20, 13:20, 15:40",
+        "destination_departures": "Mohadi Stand To New CBS Via Verwandi Mahsarul: 07:30, 10:20, 14:30"
+    },
+    {
+        "route_no": "201",
+        "route_name": "Nashik Road Depot To Bardan Phata Via Ashoka Marg, Mumbai Naka",
+        "source_departures": "Nashik Road Depot To Bardan Phata Via Ashoka Marg, Mumbai Naka: 10:40, 18:00, 18:45",
+        "destination_departures": "Bardan Phata To Nashik Road Depot Via Mahamarg, Indira Nagar, Ashoka Marg: 02:00, 04:20, 06:40, 07:40, 07:50, 08:10, 08:20, 08:40, 08:50, 09:10, 09:20, 09:40, 09:50, 10:10, 10:20, 10:40, 10:50, 11:10, 11:20, 11:40, 11:50, 12:00, 12:20, 12:40, 12:50, 13:10, 13:40, 14:20, 14:40, 14:50, 15:20, 15:40, 15:50, 16:10, 16:20, 16:40, 16:50, 17:10, 17:20, 17:40, 17:50, 18:10, 18:20, 18:40, 18:50, 19:10, 19:30, 19:40, 19:50, 20:10, 20:30, 20:50, 21:30, 23:40"
+    },
+    {
+        "route_no": "201",
+        "route_name": "Nashik Road Depot To Gangapur Gaon Via Ashoka Marg Indira Nagar",
+        "source_departures": "Nashik Road Depot To Gangapur Gaon Via Ashoka Marg Indira Nagar: 20:30, 21:00",
+        "destination_departures": "Gangapur gaon To Nashik Road Depot Via Mahamarg,Indira Nagar, Ashoka Marg: 05:00, 05:40, 06:00"
+    },
+    {
+        "route_no": "201",
+        "route_name": "Nashik Road Depot To Bardan Phata Via Indira Nagar,Mumbai Naka",
+        "source_departures": "Nashik Road Depot To Bardan Phata Via Indira Nagar,Mumbai Naka: 00:50, 00:50, 03:10, 05:10, 06:20, 06:20, 06:30, 06:50, 07:00, 07:20, 07:30, 07:50, 08:00, 08:10, 08:20, 08:40, 09:00, 09:20, 09:30, 09:50, 10:00, 10:20, 10:30, 11:00, 11:20, 11:30, 11:50, 12:10, 13:00, 13:20, 13:30, 14:00, 14:20, 14:30, 14:40, 14:50, 15:10, 15:20, 15:40, 15:50, 16:00, 16:20, 16:40, 17:00, 17:20, 17:30, 17:50, 18:15, 18:30, 19:00, 19:20, 20:00, 22:15",
+        "destination_departures": "Bardan Phata To Nashik Road Depot Via Mahamarg, Indira Nagar, Ashoka Marg: 02:00, 04:20, 06:40, 07:40, 07:50, 08:10, 08:20, 08:40, 08:50, 09:10, 09:20, 09:40, 09:50, 10:10, 10:20, 10:40, 10:50, 11:10, 11:20, 11:40, 11:50, 12:00, 12:20, 12:40, 12:50, 13:10, 13:40, 14:20, 14:40, 14:50, 15:20, 15:40, 15:50, 16:10, 16:20, 16:40, 16:50, 17:10, 17:20, 17:40, 17:50, 18:10, 18:20, 18:40, 18:50, 19:10, 19:30, 19:40, 19:50, 20:10, 20:30, 20:50, 21:30, 23:40"
+    },
+    {
+        "route_no": "201I",
+        "route_name": "Nashik Road To Bardan Phata Via Ashoka Marg Indira Nagar, Mahamarg",
+        "source_departures": "Nashik Road To Bardan Phata Via Ashoka Marg Indira Nagar, Mahamarg: 21:45",
+        "destination_departures": "Bardan Phata To Nashik Road Via Mahamarg Indira Nagar Ashoka Marg: 07:25"
+    },
+    {
+        "route_no": "201I",
+        "route_name": "Nashik Road To Gangapur gaon Via Ashoka Marg Indira Nagar Mahamarg Civil Hospital",
+        "source_departures": "Nashik Road To Gangapur gaon Via Ashoka Marg Indira Nagar Mahamarg Civil Hospital:",
+        "destination_departures": ""
+    },
+    {
+        "route_no": "201I",
+        "route_name": "Nashik Road Depot To Bardan Phata Via Ashoka Marg Indira Nagar, Mahamarg,",
+        "source_departures": "Nashik Road Depot To Bardan Phata Via Ashoka Marg Indira Nagar, Mahamarg,: 06:10, 06:10, 18:32, 19:22",
+        "destination_departures": "Bardan Phata To Nashik Road Depot Via Mahamarg Indira Nagar Ashoka Marg: 19:52, 20:42, 22:50"
+    },
+    {
+        "route_no": "202",
+        "route_name": "Nashik Road Depot To Gangapur Gaon Via Indira Nagar Shalimar Rajiv Gandhi",
+        "source_departures": "Nashik Road Depot To Gangapur Gaon Via Indira Nagar Shalimar Rajiv Gandhi: 20:30",
+        "destination_departures": "Gangapur Gaon To Nashik Road Depot Via Indira Nagar Shalimar Rajiv Gandhi: 05:40, 07:00"
+    },
+    {
+        "route_no": "202",
+        "route_name": "Nashik Road Depot To Bardan Phata Via Indira Nagar, Shalimar, Rajiv Gandhi",
+        "source_departures": "Nashik Road Depot To Bardan Phata Via Indira Nagar, Shalimar, Rajiv Gandhi: 06:30, 07:00, 07:30, 08:00, 08:00, 08:30, 09:00, 09:30, 10:00, 10:30, 11:00, 11:30, 12:00, 12:30, 13:00, 13:30, 14:00, 14:30, 15:00, 15:30, 16:00, 16:30, 17:00, 17:30, 18:00",
+        "destination_departures": "Bardan Phata To Nashik Road Depot Via Indira Nagar, Shalimar ,Rajiv Gandhi: 08:00, 08:30, 09:00, 09:30, 10:00, 10:30, 11:00, 11:30, 12:00, 12:30, 13:00, 13:30, 14:00, 14:30, 15:00, 15:30, 16:00, 16:30, 17:00, 17:30, 18:00, 18:30, 19:00, 19:30"
+    },
+    {
+        "route_no": "202I",
+        "route_name": "Nashik Road Railway Station To Gangapur Gaon Via Indira nagar Shalimar Rajiv Gandhi Bhavan HPT",
+        "source_departures": "Nashik Road Railway Station To Gangapur Gaon Via Indira nagar Shalimar Rajiv Gandhi Bhavan HPT: 21:47",
+        "destination_departures": ""
+    },
+    {
+        "route_no": "203",
+        "route_name": "Sambhaji Stadium To Symboisis collage",
+        "source_departures": "Sambhaji Stadium To Symboisis collage: 05:55, 06:25, 06:45",
+        "destination_departures": "Symbiosis College To Sambhaji Stadium: 21:45, 22:15, 22:50"
+    },
+    {
+        "route_no": "203",
+        "route_name": "Nashik Road Depot To Symbiosis college Via Ashoka Marg, Mahamarg, Trimurti Chauk",
+        "source_departures": "Nashik Road Depot To Symbiosis college Via Ashoka Marg, Mahamarg, Trimurti Chauk: 02:10, 04:40, 05:45, 06:30, 06:45, 07:00, 07:15, 07:30, 07:40, 08:00, 08:25, 08:40, 09:00, 09:15, 09:30, 09:45, 10:00, 10:15, 10:30, 10:50, 10:55, 11:15, 11:30, 11:45, 12:00, 12:15, 12:40, 13:30, 13:40, 14:00, 14:10, 14:25, 14:40, 14:55, 15:10, 15:25, 15:45, 16:25, 16:40, 17:00, 17:15, 17:30, 17:45, 18:00, 18:25, 18:45, 19:00, 19:15, 19:25, 19:40, 20:00, 20:15, 20:30, 20:45, 21:10, 21:40, 23:30",
+        "destination_departures": "Symbiosis college To Nashik Road Depot Via Trimurti Chauk, Mahamarg, Ashoka Marg: 00:55, 03:20, 05:55, 06:10, 06:40, 07:10, 07:25, 07:45, 08:00, 08:15, 08:30, 08:45, 09:00, 09:15, 09:40, 09:55, 10:15, 10:30, 10:45, 11:00, 11:15, 11:30, 11:45, 12:00, 12:10, 12:40, 12:55, 13:15, 13:30, 13:45, 14:00, 14:40, 14:55, 15:10, 15:25, 15:40, 15:55, 16:15, 16:30, 16:40, 17:05, 17:55, 18:10, 18:25, 18:40, 19:00, 19:15, 19:30, 19:50, 20:00, 20:15, 20:25, 20:40, 21:00, 21:15, 21:30, 21:45"
+    },
+    {
+        "route_no": "203I",
+        "route_name": "Nashik Road To Symbiosis college Via Ashoka Marg Indira Nagar Mahamarg Trimurti Chauk Uttam Nagar",
+        "source_departures": "Nashik Road To Symbiosis college Via Ashoka Marg Indira Nagar Mahamarg Trimurti Chauk Uttam Nagar: 21:50",
+        "destination_departures": "Symbiosis college To Nashik Road Via Trimurti Chauk Mahamarg Indira Nagar Ashoka Marg: 05:55"
+    },
+    {
+        "route_no": "203I",
+        "route_name": "Nashik Road Depot To Symbiosis college Via Ashoka Marg Indira Nagar Mahamarg Trimurti Chauk Uttam Nagar",
+        "source_departures": "Nashik Road Depot To Symbiosis college Via Ashoka Marg Indira Nagar Mahamarg Trimurti Chauk Uttam Nagar: 04:40, 17:40, 19:17",
+        "destination_departures": "Symbiosis college To Nashik Road Depot Via Trimurti Chauk Mahamarg Indira Nagar Ashoka Marg: 19:20, 20:27, 22:55"
+    },
+    {
+        "route_no": "207",
+        "route_name": "Nashik Road Depot To Ambad Gaon Via Ashoka Marg Pathardi Phata Garware",
+        "source_departures": "Nashik Road Depot To Ambad Gaon Via Ashoka Marg Pathardi Phata Garware: 00:15, 02:35, 04:50, 05:55, 06:25, 07:10, 07:25, 07:55, 07:55, 08:25, 08:55, 09:25, 09:55, 10:25, 10:55, 12:30, 13:00, 13:30, 14:30, 14:55, 15:25, 15:55, 16:25, 16:55, 17:25, 17:55, 18:25, 18:55, 19:30, 20:10, 21:30, 21:35",
+        "destination_departures": "Ambad Gaon To Nashik Road Depot Via Pathardi Phata, Ashoka Marg: 01:25, 03:45, 05:45, 06:15, 07:15, 07:45, 08:15, 08:45, 09:10, 09:45, 10:10, 10:40, 11:10, 11:40, 12:15, 13:45, 14:15, 14:45, 15:45, 16:15, 16:45, 17:15, 17:45, 18:15, 18:45, 19:15, 19:45, 20:15, 21:30, 22:55, 23:00"
+    },
+    {
+        "route_no": "207",
+        "route_name": "Ambad To Sambhaji Stadium",
+        "source_departures": "Ambad To Sambhaji Stadium: 20:45",
+        "destination_departures": "Sambhaji Stadium To Ambad: 05:25"
+    },
+    {
+        "route_no": "207I",
+        "route_name": "Nashik Road Depot To Ambad Gaon Via Ashoka Marg Indira Nagar Pathardi Phata Garware",
+        "source_departures": "Nashik Road Depot To Ambad Gaon Via Ashoka Marg Indira Nagar Pathardi Phata Garware: 20:30",
+        "destination_departures": "Ambad Gaon To Nashik Road Depot Via Pathardi Phata Indira Nagar Ashoka Marg: 21:40"
+    },
+    {
+        "route_no": "208",
+        "route_name": "Nashik Road Depot To Ozar Township Via Ashoka Marg,Indira Nagar, Mumbai Naka, AmrutDham",
+        "source_departures": "Nashik Road Depot To Ozar Township Via Ashoka Marg,Indira Nagar, Mumbai Naka, AmrutDham: 05:00, 05:00, 06:00, 07:00, 10:15, 10:55, 12:30, 13:50, 15:30, 18:45",
+        "destination_departures": "Ozar Township To Nashik Road Depot Via Mahamarg, Indira Nagar, Ashoka Marg: 07:00, 08:00, 08:00, 09:00, 12:00, 13:10, 14:25, 15:45, 17:30, 20:40"
+    },
+    {
+        "route_no": "208",
+        "route_name": "Nashik Road Depot To Ozar Stand Via Indira Nagar,Mumbai Naka,C.B.S,Panchavati",
+        "source_departures": "Nashik Road Depot To Ozar Stand Via Indira Nagar,Mumbai Naka,C.B.S,Panchavati: 07:50, 08:55, 11:20, 15:05, 16:35, 19:30",
+        "destination_departures": "Ozar Stand To Nashik Road Depot Via Jatra hotel, Indira Nagar: 09:40, 10:45, 13:20, 16:50, 18:15, 21:10"
+    },
+    {
+        "route_no": "210I",
+        "route_name": "Nashik Road Depot To Dindori Via Ashoka Marg Indira Nagar Mumbai Naka Nimani Mhasrul",
+        "source_departures": "Nashik Road Depot To Dindori Via Ashoka Marg Indira Nagar Mumbai Naka Nimani Mhasrul: 05:10, 05:25, 05:40, 05:55, 06:10, 06:25, 06:50, 07:20, 07:35, 08:05, 08:35, 08:35, 13:20, 13:35, 13:50, 14:20, 14:35, 14:50, 15:20, 15:35, 15:50, 16:20, 16:35",
+        "destination_departures": "Dindori To Nashik Road Depot Via Mhasrul Nimani Indira Nagar Ashoka Marg: 09:40, 10:10, 10:40, 10:50, 11:20, 11:35, 11:50, 12:20, 12:35, 12:50, 13:35, 16:55, 17:25, 17:55, 19:15, 19:30, 19:45, 20:15, 20:30"
+    },
+    {
+        "route_no": "210I",
+        "route_name": "Nashik road To Dindori (Swami Samarth Kendra) Via Ashoka Marg Mumbai Naka Indira Nagar Mhasrul Talegaon",
+        "source_departures": "Nashik road To Dindori (Swami Samarth Kendra) Via Ashoka Marg Mumbai Naka Indira Nagar Mhasrul Talegaon: 07:50, 08:20, 08:50, 09:00, 09:30, 09:45, 10:00, 10:30, 10:45, 11:00, 11:45, 17:20, 17:35, 17:50, 18:20, 18:35, 19:35, 20:05, 20:35",
+        "destination_departures": "Dindori (Swami Samarth Kendra) To Nashik road Via Talegaon Mhasrul Indira Nagar Nagji Hospital Ashoka Marg: 06:00, 06:30, 06:55, 07:10, 07:25, 07:40, 07:55, 08:10, 08:25, 08:40, 09:10, 09:25, 09:55, 10:25, 15:25, 15:40, 15:55, 16:25, 16:40, 17:40, 18:25, 18:40"
+    },
+    {
+        "route_no": "210J",
+        "route_name": "Nashik Road Depot To Dindori Via Nandur Naka Tapovan Dindori Naka Mhasrul",
+        "source_departures": "Nashik Road Depot To Dindori Via Nandur Naka Tapovan Dindori Naka Mhasrul: 07:15, 08:15",
+        "destination_departures": ""
+    },
+    {
+        "route_no": "210J",
+        "route_name": "Nashik Road To Dindori Via Nandur Naka Tapovan Dindori Naka Mhasrul",
+        "source_departures": "Nashik Road To Dindori Via Nandur Naka Tapovan Dindori Naka Mhasrul: 11:15, 12:15, 15:30, 16:30",
+        "destination_departures": "Dindori To Nashik Road Via Mhasrul Dindori Naka Tapovan Nandur Naka: 09:15, 10:15, 13:15, 14:15, 17:30, 18:30"
+    },
+    {
+        "route_no": "210T",
+        "route_name": "Nashik road To Dindori (Swami Samarth Kendra) Via Vijay Mamta, Metro Mall,Tapovan,Mhasrul Talegaon",
+        "source_departures": "Nashik road To Dindori (Swami Samarth Kendra) Via Vijay Mamta, Metro Mall,Tapovan,Mhasrul Talegaon: 09:15, 10:15, 11:15, 12:15, 17:05, 18:05",
+        "destination_departures": "Dindori (Swami Samarth Kendra) To Nashik road Via Talegaon Mhasrul Tapovan,Metro Mall,Vijay Mamata: 08:55, 15:10, 16:10, 17:10, 18:10"
+    },
+    {
+        "route_no": "210T",
+        "route_name": "Nashik Road Depot To Dindori Via Via Vijay Mamata,Metro Mall, Tapovan,Mhasrul",
+        "source_departures": "Nashik Road Depot To Dindori Via Via Vijay Mamata,Metro Mall, Tapovan,Mhasrul: 07:05, 13:05, 14:05, 15:05, 16:05",
+        "destination_departures": "Dindori To Nashik Road Depot Via Mhasrul Tapovan,Metro Mall,Vijay Mamta: 11:05, 12:05, 13:05, 14:05, 19:00, 20:00"
+    },
+    {
+        "route_no": "211",
+        "route_name": "Nashik Road Depot To Ashirwad Nagar Via Ashoka Marg, Indira Nagar",
+        "source_departures": "Nashik Road Depot To Ashirwad Nagar Via Ashoka Marg, Indira Nagar: 07:30, 08:00, 08:55, 08:55, 10:05, 10:35, 11:35, 12:45, 14:00, 15:35, 16:40, 17:40, 18:10, 19:10, 20:10",
+        "destination_departures": "Ashirwad Nagar To Nashik Road Depot Via Indira Nagar, Ashoka Marg: 06:45, 08:45, 09:20, 10:10, 11:30, 12:00, 12:50, 14:00, 15:25, 16:55, 17:55, 18:55, 20:25, 21:25"
+    },
+    {
+        "route_no": "211",
+        "route_name": "Mhada /Ashirwad Nagar To Chhatrapati Sambhaji Maharaj Stadium Via XLO Point,Ambad Gaon",
+        "source_departures": "Mhada /Ashirwad Nagar To Chhatrapati Sambhaji Maharaj Stadium Via XLO Point,Ambad Gaon: 19:25",
+        "destination_departures": "Chhatrapati Sambhaji Maharaj Stadium To Mhada /Ashirwad Nagar Via Ambad Gaon,XLO Point: 06:00"
+    },
+    {
+        "route_no": "220",
+        "route_name": "NashikRoad Depot To Matoshri Collage Via Deolali Gaon Eklahara",
+        "source_departures": "NashikRoad Depot To Matoshri Collage Via Deolali Gaon Eklahara: 07:00, 08:45, 10:30, 12:15, 13:50, 15:45",
+        "destination_departures": "Matoshri Collage To NashikRoad Depot Via Eklahara Deolali Gaon: 08:00, 09:30, 11:30, 13:00, 15:00, 17:20"
+    },
+    {
+        "route_no": "221B",
+        "route_name": "Nashik Road Depot To Shigve Bahula Via Kothari jamal",
+        "source_departures": "Nashik Road Depot To Shigve Bahula Via Kothari jamal: 06:20, 11:30, 16:45, 16:50, 17:00",
+        "destination_departures": ""
+    },
+    {
+        "route_no": "222",
+        "route_name": "Vitbhatti Gaulane To Shigve Bahula Via Pathardi Vedner Dhondi Road",
+        "source_departures": "Vitbhatti Gaulane To Shigve Bahula Via Pathardi Vedner Dhondi Road: 11:00",
+        "destination_departures": "Shigve Bahula To Vitbhatti Gaulane Via Dhondi Road Vedner: 17:40"
+    },
+    {
+        "route_no": "222",
+        "route_name": "Pathardi Gaon To Vitbhatti Gaulane Via Vaadiche Raan",
+        "source_departures": "Pathardi Gaon To Vitbhatti Gaulane Via Vaadiche Raan:",
+        "destination_departures": "Vitbhatti Gaulane To Pathardi Gaon Via Vaadiche Raan:"
+    },
+    {
+        "route_no": "223",
+        "route_name": "Pimpalgaon Khamb To Shigve Bahula",
+        "source_departures": "Pimpalgaon Khamb To Shigve Bahula: 06:50, 11:55",
+        "destination_departures": "Shigve Bahula To Pimpalgaon Khamb: 12:25, 17:40"
+    },
+    {
+        "route_no": "223",
+        "route_name": "NashikRoad Depot To Pimpalgaon Khamb Via Vihit Gaon Vadner",
+        "source_departures": "NashikRoad Depot To Pimpalgaon Khamb Via Vihit Gaon Vadner: 06:00, 11:05",
+        "destination_departures": ""
+    },
+    {
+        "route_no": "231",
+        "route_name": "Nashik Road Depot To Girnare Via Ashoka Marg, Indira Nagar",
+        "source_departures": "Nashik Road Depot To Girnare Via Ashoka Marg, Indira Nagar: 08:00",
+        "destination_departures": "Girnare To Nashik Road Depot Via Ashoka Marg, Indira Nagar: 10:00"
+    },
+    {
+        "route_no": "231",
+        "route_name": "Nashik Road Depot To JIT Collage Via Ashoka Marg Indira Nagar Shalimar",
+        "source_departures": "Nashik Road Depot To JIT Collage Via Ashoka Marg Indira Nagar Shalimar: 15:00",
+        "destination_departures": "JIT Collage To Nashik Road Depot Via Shalimar Ashoka Marg Indira Nagar: 16:30"
+    },
+    {
+        "route_no": "238",
+        "route_name": "Nashik Road Depot To Mukt Vidhyapith Via Ashoka Marg, Indira Nagar, KTHM",
+        "source_departures": "Nashik Road Depot To Mukt Vidhyapith Via Ashoka Marg, Indira Nagar, KTHM: 09:00, 16:00",
+        "destination_departures": "Mukt Vidhyapith To Nashik Road Depot Via KTHM College, Shalimar, Mumbai naka, Indira Nagar ,Ashoka Marg: 10:20, 17:50"
+    },
+    {
+        "route_no": "240",
+        "route_name": "Nashik Road Depot To Ozar Airforce School Via Jailroad, Adgaon",
+        "source_departures": "Nashik Road Depot To Ozar Airforce School Via Jailroad, Adgaon: 06:30, 12:50",
+        "destination_departures": ""
+    },
+    {
+        "route_no": "240",
+        "route_name": "Nashik road depot To Ozar Stand Via Jailroad Jatra Hotel",
+        "source_departures": "Nashik road depot To Ozar Stand Via Jailroad Jatra Hotel: 18:15",
+        "destination_departures": "Ozar Stand To Nashik Road Depot Via Jailroad Jatra Hotel: 19:25"
+    },
+    {
+        "route_no": "240B",
+        "route_name": "Nashik road depot To Ozar Airforce Colony Gate Via Jailroad Jatra Hotel",
+        "source_departures": "Nashik road depot To Ozar Airforce Colony Gate Via Jailroad Jatra Hotel: 09:15, 15:40",
+        "destination_departures": "Ozar Airforce Colony To Nashikroad Depot Via Jatra Hotel Jailroad: 10:30, 16:45"
+    },
+    {
+        "route_no": "242",
+        "route_name": "NashikRoad Depot To Gangapur Gaon Via Indira Nagr KTHM",
+        "source_departures": "NashikRoad Depot To Gangapur Gaon Via Indira Nagr KTHM: 07:00",
+        "destination_departures": "Gangapur Gav To Nashik Road Depot Via KTHM College Mumbai naka Ashoka Marg Satpur: 06:00, 08:00"
+    },
+    {
+        "route_no": "242I",
+        "route_name": "Nashik Road To Gangapur gaon Via Ashoka Marg Indira Nagar Mumbai Naka KTHM",
+        "source_departures": "Nashik Road To Gangapur gaon Via Ashoka Marg Indira Nagar Mumbai Naka KTHM: 21:47",
+        "destination_departures": ""
+    },
+    {
+        "route_no": "243",
+        "route_name": "Nashik Road Depot To Borgad Via Ashoka Marg, Indira Nagar",
+        "source_departures": "Nashik Road Depot To Borgad Via Ashoka Marg, Indira Nagar: 05:20, 06:20, 07:00, 07:00, 08:10, 09:20, 10:20, 11:25, 12:00, 13:10, 13:30, 14:40, 15:50, 16:50, 17:40, 18:20, 18:50, 19:30, 20:20",
+        "destination_departures": "Borgad To Nashik Road Depot Via Indira Nagar, Ashoka Marg: 06:30, 07:40, 08:10, 09:30, 10:40, 11:40, 12:40, 13:20, 14:30, 14:50, 16:00, 17:05, 18:10, 19:00, 19:40, 20:10, 20:50, 21:40"
+    },
+    {
+        "route_no": "243P",
+        "route_name": "Nashik Road Depot To Borgad/Santosh Edu Phamacy College Via Ashoka Marg, Indira Nagar",
+        "source_departures": "Nashik Road Depot To Borgad/Santosh Edu Phamacy College Via Ashoka Marg, Indira Nagar: 07:40, 08:50, 14:10, 16:10",
+        "destination_departures": "Borgad/Santosh Edu Phamacy College To Nashik Road Depot Via Indira Nagar, Ashoka Marg: 09:00, 10:05, 15:30, 17:30"
+    },
+    {
+        "route_no": "245",
+        "route_name": "Nashik Road Depot To Trimbakeshwar Via Satpur Bus Stand",
+        "source_departures": "Nashik Road Depot To Trimbakeshwar Via Satpur Bus Stand: 04:40, 05:20, 05:40, 06:00, 06:40, 07:20, 08:10, 08:10, 08:10, 09:55, 10:45, 12:00, 12:40, 12:45, 13:10, 13:40, 14:00, 14:05, 14:40, 15:20, 16:10, 16:50",
+        "destination_departures": "Trimbakeshwar To Nashik Road Depot Via Civil Hospital: 09:05, 10:10, 10:50, 10:55, 11:40, 12:00, 12:10, 12:50, 13:30, 14:20, 14:50, 14:55, 15:45, 15:50, 16:10, 16:50, 17:15, 17:30, 18:10, 19:30, 19:40, 21:00"
+    },
+    {
+        "route_no": "245",
+        "route_name": "Nashik Road To Trimbakeshwar Via Mela Stand Satpur",
+        "source_departures": "Nashik Road To Trimbakeshwar Via Mela Stand Satpur: 07:05, 08:02, 08:40, 08:55, 09:40, 09:50, 10:10, 10:50, 11:30, 12:20, 13:00, 13:45, 14:50, 16:10, 17:30, 17:40, 18:20",
+        "destination_departures": "Trimbakeshwar To Nashikroad Via Mela Bus Stand Nimani Nandur Naka: 07:00, 07:30, 07:50, 08:10, 08:50, 09:30, 10:17, 10:20, 11:00, 11:50, 12:45, 14:10, 15:20, 16:05, 18:20, 19:00"
+    },
+    {
+        "route_no": "245EXP",
+        "route_name": "Nashik Road Depot To Trambkeshwar Via Vijay Mamata Indira Nagar City Centar Mall,Satpur",
+        "source_departures": "Nashik Road Depot To Trambkeshwar Via Vijay Mamata Indira Nagar City Centar Mall,Satpur: 07:50, 08:55",
+        "destination_departures": ""
+    },
+    {
+        "route_no": "247",
+        "route_name": "Nashik Road Depot To Mohadi Via Ashoka Marg Indira Nagar",
+        "source_departures": "Nashik Road Depot To Mohadi Via Ashoka Marg Indira Nagar: 05:30, 05:30, 05:30",
+        "destination_departures": "Mohadi To Nashik Road Depot Via Mahamarg, Indira Nagar, Ashoka Marg: 17:10"
+    },
+    {
+        "route_no": "251",
+        "route_name": "Nashik Road Depot To Panchavati Karanja Via Nandur Gaon Dasak",
+        "source_departures": "Nashik Road Depot To Panchavati Karanja Via Nandur Gaon Dasak: 05:15, 05:15, 16:30, 19:00, 20:15, 21:45, 21:50",
+        "destination_departures": "Panchavati Karanja To Nashik Road Depot Via Nandur Naka: 06:15, 17:45, 19:50, 21:00, 23:00, 23:10"
+    },
+    {
+        "route_no": "251",
+        "route_name": "NashikRoad Depot To New CBS Via Jail Road Tapovan",
+        "source_departures": "NashikRoad Depot To New CBS Via Jail Road Tapovan: 16:30, 18:00",
+        "destination_departures": ""
+    },
+    {
+        "route_no": "256",
+        "route_name": "NashikRoad Depot To Hinganveda Via SamanGoan kotam gaon",
+        "source_departures": "NashikRoad Depot To Hinganveda Via SamanGoan kotam gaon: 05:50, 07:15, 09:50, 09:50, 13:00, 16:20, 17:40, 19:00",
+        "destination_departures": "Hinganweda To Nashik Road Depot Via Samangaon: 06:35, 07:55, 10:30, 13:50, 17:00, 18:20, 19:40"
+    },
+    {
+        "route_no": "258",
+        "route_name": "Nashik Road Depot To Jakhorigaon Via Palse Shinde Chandgiri Jakhori Fata",
+        "source_departures": "Nashik Road Depot To Jakhorigaon Via Palse Shinde Chandgiri Jakhori Fata: 08:30, 16:15",
+        "destination_departures": "Jakhorigaon To Nashik Road Depot Via Chandgiri Jakhori Fata Shinde Palse: 09:10, 17:10"
+    },
+    {
+        "route_no": "259C",
+        "route_name": "Nashik Road Depot To Panchavati Karanja Via Takali Goan Geetai Nagar Nagji Hospital Mahamarg",
+        "source_departures": "Nashik Road Depot To Panchavati Karanja Via Takali Goan Geetai Nagar Nagji Hospital Mahamarg: 10:30, 11:30, 12:30, 15:30, 16:30, 17:30, 19:00",
+        "destination_departures": "Panchavati Karanja To Nashik Road Depot Via Andhshala Nagji hospital Geetai Nagar: 11:30, 12:30, 13:30, 16:30, 17:30, 18:30, 20:00"
+    },
+    {
+        "route_no": "259C",
+        "route_name": "Nashik Road Depot To Tapovan Depot Via Takali Geetai Nagar Nagji Hospital",
+        "source_departures": "Nashik Road Depot To Tapovan Depot Via Takali Geetai Nagar Nagji Hospital: 07:30, 09:00",
+        "destination_departures": "Tapovan Depot To Nashik Road Depot Via Nagji hospital Takali: 09:20, 10:20"
+    },
+    {
+        "route_no": "263",
+        "route_name": "Nashik Road Depot To Bhujbal Knowledge City Via Ashoka Marg Indira nagar Hirawadi Fata",
+        "source_departures": "Nashik Road Depot To Bhujbal Knowledge City Via Ashoka Marg Indira nagar Hirawadi Fata: 06:35, 07:35, 08:35, 09:50, 10:50, 11:50, 12:50, 13:50, 14:50, 15:50, 16:50, 17:50",
+        "destination_departures": "Bhujbal Knowledge City To Nashik Road Depot Via Kamal Nagar Indira nagar Ashoka Marg: 08:20, 09:20, 10:20, 11:20, 12:20, 13:20, 14:20, 15:20, 16:20, 17:20, 18:20, 19:20"
+    },
+    {
+        "route_no": "264",
+        "route_name": "Nashik Road Depot To Army Public School Via Vinay Nagar Indira nagar pathardi phata",
+        "source_departures": "Nashik Road Depot To Army Public School Via Vinay Nagar Indira nagar pathardi phata: 05:30",
+        "destination_departures": ""
+    },
+    {
+        "route_no": "264",
+        "route_name": "Tapovan To Army public School Via Vadner",
+        "source_departures": "Tapovan To Army public School Via Vadner: 05:32",
+        "destination_departures": "Army Public School To Tapovan Depot Via Pathardi phata mahamarg cbs: 13:45"
+    },
+    {
+        "route_no": "264",
+        "route_name": "Tapovan To Army public School Via Vadner",
+        "source_departures": "Tapovan To Army public School Via Vadner: 05:32",
+        "destination_departures": "Army Public School To Tapovan Depot Via vadner pathardi phata trimurti: 13:47"
+    },
+    {
+        "route_no": "264A",
+        "route_name": "Nashik Road Depot To Army Public School Via Bhatia Sansari Naka",
+        "source_departures": "Nashik Road Depot To Army Public School Via Bhatia Sansari Naka: 12:50, 13:00",
+        "destination_departures": "Army Public School To Nashik Road Depot Via Bhatia: 07:15, 07:20"
+    },
+    {
+        "route_no": "265",
+        "route_name": "Nashik Road Depot To Bhujbal Knowledge City Via Jail Road Nandur Gaon Jatra Hotel",
+        "source_departures": "Nashik Road Depot To Bhujbal Knowledge City Via Jail Road Nandur Gaon Jatra Hotel: 06:30, 06:30, 08:50, 13:30, 15:40",
+        "destination_departures": "Bhujbal Knowledge City To Nashik Road Depot Via Jatra Hotel Nandur Gaon Jail Road: 07:50, 09:45, 14:40, 16:40"
+    },
+    {
+        "route_no": "266",
+        "route_name": "Nashik Road Depot To Tapovan Depot Via Ashoka Marg Mahamarg",
+        "source_departures": "Nashik Road Depot To Tapovan Depot Via Ashoka Marg Mahamarg: 07:40, 08:00, 08:05, 10:00, 14:55, 16:30, 17:20, 18:00, 19:30",
+        "destination_departures": "Tapovan Depot To Nashik Road Depot Via Mahamarg Ashoka Marg: 08:55, 09:00, 11:00, 15:15, 15:50, 16:10, 18:00, 18:30, 19:10, 19:35"
+    },
+    {
+        "route_no": "266A",
+        "route_name": "Nashik Road Depot To Panchavati Karanja Via Mahamarg Indira Nagar",
+        "source_departures": "Nashik Road Depot To Panchavati Karanja Via Mahamarg Indira Nagar: 01:30, 02:30, 03:30, 04:30, 13:30, 19:00, 19:25, 21:45, 22:15, 23:55",
+        "destination_departures": "Panchavati Karanja To Nashik Road Depot Via Mahamarg Ashoka Marg: 00:45, 02:30, 03:30, 04:30, 05:30, 14:30, 20:00, 22:40, 23:20"
+    },
+    {
+        "route_no": "266I",
+        "route_name": "Nashik Road Railway Station To Panchavati Karanja Via Ashoka Marg Indira Nagar",
+        "source_departures": "Nashik Road Railway Station To Panchavati Karanja Via Ashoka Marg Indira Nagar: 19:00, 20:15, 20:30",
+        "destination_departures": ""
+    },
+    {
+        "route_no": "298",
+        "route_name": "Tapovan To Borgad Air Force Via Nimani Mhasrul",
+        "source_departures": "Tapovan To Borgad Air Force Via Nimani Mhasrul: 05:25",
+        "destination_departures": "Borgad Air Force To Tapovan Via Mhasrul Nimani: 22:50"
+    },
+    {
+        "route_no": "298",
+        "route_name": "Nashik Road Depot To Borgad Air Force Via Mahamarag Ashoka Marg,Indira nagar",
+        "source_departures": "Nashik Road Depot To Borgad Air Force Via Mahamarag Ashoka Marg,Indira nagar: 07:15, 09:45, 16:00, 18:40, 21:45",
+        "destination_departures": "Borgad Air Force To Nashikroad Depot Via Indira nagar, Ashoka Marg: 06:00, 08:30, 11:00, 17:30, 19:50"
+    },
+    {
+        "route_no": "298I",
+        "route_name": "Nashik Road Depot To Borgad Air Force Via Ashoka Marg,Indira nagar Mumbai Naka",
+        "source_departures": "Nashik Road Depot To Borgad Air Force Via Ashoka Marg,Indira nagar Mumbai Naka: 21:00",
+        "destination_departures": "Borgad To Nashikroad depot Via Indira nagar, Ashoka Marg: 22:10"
+    },
+    {
+        "route_no": "101",
+        "route_name": "Tapovan To Gangapur Gaon Via Civil Satpur Ashok Nagar",
+        "source_departures": "Tapovan To Gangapur Gaon Via Civil Satpur Ashok Nagar: 20:15, 21:50",
+        "destination_departures": ""
+    },
+    {
+        "route_no": "101",
+        "route_name": "Tapovan To Bardan Phata",
+        "source_departures": "Tapovan To Bardan Phata: 05:13, 05:13, 05:47, 06:17, 06:47, 07:17, 07:45, 08:15, 08:45, 09:15, 09:45, 10:15, 10:45, 11:45, 12:15, 12:47, 13:17, 13:47, 14:17, 14:47, 15:15, 15:45, 16:15, 16:45, 17:15, 18:15, 18:45, 19:30, 19:45, 20:50",
+        "destination_departures": "Bardan Phata To Tapovan: 07:00, 07:30, 08:00, 08:30, 09:00, 09:30, 10:00, 10:30, 11:32, 12:02, 12:32, 13:02, 13:32, 14:00, 14:30, 15:00, 15:30, 16:00, 16:25, 17:00, 17:30, 18:00, 18:30, 19:02, 19:32, 20:02, 20:40, 20:58, 21:55"
+    },
+    {
+        "route_no": "101R",
+        "route_name": "Tapovan To Bardan Phata Via KTHM College Rachana Vidyalaya Satpur",
+        "source_departures": "Tapovan To Bardan Phata Via KTHM College Rachana Vidyalaya Satpur: 11:20, 17:35",
+        "destination_departures": "Bardan Phata To Tapovan Via KTHM College Rachana Vidyalaya Satpur: 06:25, 11:00"
+    },
+    {
+        "route_no": "102B",
+        "route_name": "Tapovan Terminus To Bardan Phata Via Shalimar Satpur Ashok Nagar",
+        "source_departures": "Tapovan Terminus To Bardan Phata Via Shalimar Satpur Ashok Nagar: 07:17, 07:35, 08:00, 08:30, 09:40, 10:00, 10:00, 10:20, 11:00, 12:10, 12:30, 12:50, 13:35, 14:50, 15:10, 15:30, 16:10, 17:20, 17:40",
+        "destination_departures": "Bardan Phata To Tapovan Terminus Via Ashok Nagar HPT College: 08:25, 08:45, 09:05, 09:45, 10:55, 11:15, 11:35, 12:15, 13:25, 13:45, 14:05, 14:45, 16:05, 16:25, 16:47, 17:27, 18:37, 19:00"
+    },
+    {
+        "route_no": "103",
+        "route_name": "Tapovan To Symbiosis college Via CBS Trimurti Chowk Uttam Nagar",
+        "source_departures": "Tapovan To Symbiosis college Via CBS Trimurti Chowk Uttam Nagar: 05:58, 06:08, 06:28, 06:38, 07:00, 07:18, 07:28, 07:42, 07:50, 08:20, 08:30, 08:50, 09:10, 09:20, 09:30, 09:40, 10:10, 10:20, 10:40, 10:52, 11:00, 11:10, 11:20, 11:40, 12:10, 12:20, 13:00, 13:20, 13:40, 13:50, 14:00, 14:10, 14:32, 14:45, 14:58, 15:02, 15:30, 16:00, 16:10, 16:30, 16:50, 17:00, 17:10, 17:20, 17:50, 18:00, 18:20, 18:40, 18:50, 19:00, 19:20, 19:50, 20:00, 20:30, 21:00, 21:35",
+        "destination_departures": "Symbiosis college To Tapovan Via Nimani CBS Uttam Nagar: 06:00, 06:30, 06:55, 07:05, 07:25, 07:35, 07:55, 08:15, 08:25, 08:35, 08:45, 09:15, 09:25, 09:45, 10:05, 10:15, 10:25, 10:35, 11:05, 11:15, 11:37, 11:47, 11:55, 12:07, 12:15, 12:35, 13:05, 13:15, 13:55, 14:15, 14:35, 14:45, 15:00, 15:05, 15:35, 15:45, 15:55, 16:05, 16:25, 16:55, 17:05, 17:25, 17:45, 17:55, 18:05, 18:15, 18:45, 18:55, 19:15, 19:35, 19:45, 19:55, 20:17, 20:47, 20:57, 21:57"
+    },
+    {
+        "route_no": "103A",
+        "route_name": "Sambhaji Stadium To Symboisis collage Via Symboisis Chaufulli",
+        "source_departures": "Sambhaji Stadium To Symboisis collage Via Symboisis Chaufulli: 05:47, 06:22",
+        "destination_departures": "Symboisis collage To Sambhaji Stadium Via Symboisis Chaufulli: 21:23, 22:32"
+    },
+    {
+        "route_no": "103M",
+        "route_name": "Tapovan To Symbiosis college Via CBS Kalika Park,Mahakali Chowk,Uttam Nagar",
+        "source_departures": "Tapovan To Symbiosis college Via CBS Kalika Park,Mahakali Chowk,Uttam Nagar: 06:20, 06:50, 08:10, 08:40, 10:00, 10:30, 12:00, 12:30, 13:55, 14:30, 15:50, 16:20, 17:40, 18:10, 19:40, 20:10",
+        "destination_departures": "Symbiosis college To Tapovan Via Uttam Nagar, Mahakali Chowk,Kalika Park,CBS: 07:15, 07:45, 09:05, 09:35, 10:55, 11:25, 12:55, 13:25, 14:55, 15:25, 16:45, 17:15, 18:35, 19:05, 20:35, 21:05"
+    },
+    {
+        "route_no": "104",
+        "route_name": "Tapovan Depot To Pathardi Gaon Via Nagji Indira Nagar Vanvaibhav",
+        "source_departures": "Tapovan Depot To Pathardi Gaon Via Nagji Indira Nagar Vanvaibhav: 06:05, 06:20, 07:10, 07:25, 07:25, 07:40, 07:55, 08:10, 08:10, 08:25, 08:40, 09:00, 09:15, 09:30, 09:45, 10:00, 10:15, 10:45, 11:20, 11:35, 11:50, 12:05, 12:20, 12:35, 13:15, 13:25, 13:45, 14:15, 14:40, 15:05, 15:20, 15:35, 15:50, 16:05, 16:20, 16:55, 17:10, 17:25, 17:40, 17:55, 18:10, 18:45, 19:25, 20:15",
+        "destination_departures": "Pathardi Gaon To Tapovan Via Vanvaibhav Indira Nagar Nagji: 07:00, 07:15, 08:05, 08:20, 08:35, 08:50, 09:05, 09:20, 09:35, 09:55, 10:10, 10:25, 10:40, 10:55, 11:10, 11:40, 12:15, 12:30, 12:45, 13:00, 13:15, 13:30, 14:10, 14:25, 14:40, 15:10, 15:35, 16:00, 16:15, 16:30, 16:45, 17:00, 17:15, 17:50, 18:05, 18:20, 18:35, 18:55, 19:20, 19:50, 20:20, 21:15"
+    },
+    {
+        "route_no": "104",
+        "route_name": "Tapovan To Kendriya Vidyalay Via Nagji Rajput Colony",
+        "source_departures": "Tapovan To Kendriya Vidyalay Via Nagji Rajput Colony: 06:50, 13:00",
+        "destination_departures": "Kendriya Vidyalay To Tapovan Via Vedner Gate Pathardi Gaon: 07:45, 14:20"
+    },
+    {
+        "route_no": "104",
+        "route_name": "Tapovan To Vitbhatti Gaulane Via Nagji Indira Nagar Pathardigaon",
+        "source_departures": "Tapovan To Vitbhatti Gaulane Via Nagji Indira Nagar Pathardigaon: 16:35",
+        "destination_departures": "Vitbhatti Gaulane To Tapovan Via Pathardigaon Indira Nagar Nagji: 17:50"
+    },
+    {
+        "route_no": "106",
+        "route_name": "Tapovan To Amruta Nagar Via Kamod Nagar Vasan Nagar Pathardi Phata",
+        "source_departures": "Tapovan To Amruta Nagar Via Kamod Nagar Vasan Nagar Pathardi Phata: 06:35, 07:05, 08:25, 08:55, 09:25, 10:30, 12:50, 13:20, 13:50, 14:20, 15:15, 15:45, 16:15, 16:45, 17:45, 18:15, 20:30",
+        "destination_departures": "Amruta Nagar To Tapovan Via Pathardi Phata Vasan Nagar Kamod Nagar: 07:45, 08:15, 09:45, 10:15, 10:45, 11:40, 14:00, 14:30, 15:00, 15:30, 16:30, 17:00, 17:30, 18:00, 18:55, 19:25, 21:30"
+    },
+    {
+        "route_no": "106",
+        "route_name": "Tapovan To Swpnapurti Nagar Via Kamod Nagar Vasan Nagar Pathardi Phata",
+        "source_departures": "Tapovan To Swpnapurti Nagar Via Kamod Nagar Vasan Nagar Pathardi Phata: 05:20, 06:05, 07:55, 11:00, 11:30, 12:00, 18:40, 19:15",
+        "destination_departures": "Swpnapurti Nagar To Tapovan Via Pathardi Phata Vasan Nagar Kamod Nagar: 06:30, 07:15, 09:15, 12:10, 12:40, 13:05, 19:55, 20:25"
+    },
+    {
+        "route_no": "106C",
+        "route_name": "Tapovan To Kendriya Vidyalay( Vadner ) Via Lekha Nagar",
+        "source_departures": "Tapovan To Kendriya Vidyalay( Vadner ) Via Lekha Nagar: 06:50, 13:00",
+        "destination_departures": "Kendriya Vidyalay(Vadner) To Tapovan Via Pathardi Gaon: 14:25"
+    },
+    {
+        "route_no": "106G",
+        "route_name": "Tapovan To Amruta Nagar Via CBS Mahmarg Chetana Nagar Gamane Kridangan Vikrikar Bhavan",
+        "source_departures": "Tapovan To Amruta Nagar Via CBS Mahmarg Chetana Nagar Gamane Kridangan Vikrikar Bhavan: 05:50, 06:20, 07:20, 08:10, 08:40, 09:40, 10:30, 10:45, 11:15, 12:15, 13:05, 13:35, 14:05, 14:35, 15:30, 16:00, 16:30, 17:00, 18:00, 18:30, 19:00, 19:30",
+        "destination_departures": "Amruta Nagar To Tapovan Via Vikrikar Bhavan Gamane Kridangan Chetana Nagar Mahmarg CBS: 07:00, 07:30, 08:30, 08:50, 09:30, 10:00, 11:00, 11:45, 11:55, 12:25, 13:25, 14:15, 14:45, 15:15, 15:45, 16:45, 17:15, 17:45, 18:15, 19:10, 19:40, 20:10, 20:40"
+    },
+    {
+        "route_no": "107",
+        "route_name": "Tapovan To Ambad Gaon Via Mahamarg Lekha Nagar Garware",
+        "source_departures": "Tapovan To Ambad Gaon Via Mahamarg Lekha Nagar Garware: 06:32, 07:30, 08:00, 08:32, 09:00, 09:30, 10:32, 11:00, 12:00, 13:02, 15:00, 16:30, 17:00, 17:30, 18:00, 18:30, 19:00, 20:00, 21:30",
+        "destination_departures": "Ambad Gaon To Tapovan Via Garware Lekha Nagar Mahamarg: 07:30, 08:30, 09:00, 09:30, 10:00, 11:00, 11:57, 12:30, 13:00, 14:27, 16:00, 17:30, 18:00, 18:30, 19:00, 19:30, 20:02, 21:02, 22:32"
+    },
+    {
+        "route_no": "108",
+        "route_name": "New CBS(Mico Circle) To Sukena Via Adgaon Ozar",
+        "source_departures": "New CBS(Mico Circle) To Sukena Via Adgaon Ozar: 07:30, 08:30, 10:30, 11:30, 12:30, 14:00, 15:00, 17:30, 18:30, 19:15, 19:45, 20:15",
+        "destination_departures": "Sukena To New CBS(Mico Circle) Via Ozar Dikshi Adgaon: 06:00, 07:00, 07:15, 09:15, 10:15, 12:15, 13:15, 14:15, 15:45, 16:45, 19:05, 20:05"
+    },
+    {
+        "route_no": "108",
+        "route_name": "New CBS To Mauje Sukhena Stand Via Adgaon Ozar",
+        "source_departures": "New CBS To Mauje Sukhena Stand Via Adgaon Ozar: 06:00, 09:30, 16:15",
+        "destination_departures": "Mauje Sukhena Stand To New CBS Via Ozar Adgaon: 08:15, 11:15, 17:50"
+    },
+    {
+        "route_no": "111",
+        "route_name": "Tapovan To Mhada Via Civil Satpur",
+        "source_departures": "Tapovan To Mhada Via Civil Satpur: 05:30, 05:30, 06:17, 06:30, 07:40, 08:30, 10:05, 11:05, 12:30, 13:20, 13:30, 14:50, 15:50, 17:10, 18:10",
+        "destination_departures": "Mhada To Tapovan Via Satpur Civil: 06:35, 07:30, 07:35, 09:00, 10:00, 11:10, 12:10, 13:40, 14:20, 14:40, 16:00, 17:00, 18:20, 19:20"
+    },
+    {
+        "route_no": "111B",
+        "route_name": "Tapovan To Mhada Via Ved Mandir",
+        "source_departures": "Tapovan To Mhada Via Ved Mandir: 05:50, 07:00, 07:00, 07:20, 08:10, 09:10, 10:35, 11:35, 13:00, 13:45, 14:00, 15:20, 16:20, 17:40, 18:40",
+        "destination_departures": "Mhada To Tapovan Via Ved Mandir: 07:05, 08:05, 08:30, 09:30, 10:30, 11:40, 12:40, 14:10, 14:40, 15:10, 16:30, 17:30, 18:50, 19:50"
+    },
+    {
+        "route_no": "127",
+        "route_name": "Tapovan Terminus To Chunchale Gaon Via ITI Khutwad Nagar Keval Park Dattamandir XLO Point",
+        "source_departures": "Tapovan Terminus To Chunchale Gaon Via ITI Khutwad Nagar Keval Park Dattamandir XLO Point: 07:35, 09:30, 16:10, 17:50",
+        "destination_departures": "Chunchale Gaon To Tapovan Terminus Via XLO Point Dattamandir Keval Park Khutwad Nagar ITI: 08:25, 10:25, 17:00, 18:45"
+    },
+    {
+        "route_no": "128",
+        "route_name": "Tapovan To Chunchale Gaon Via Civil Trimurti Chowk Kamatwada",
+        "source_departures": "Tapovan To Chunchale Gaon Via Civil Trimurti Chowk Kamatwada: 05:15, 05:30, 06:05, 06:17, 06:17, 06:32, 06:45, 07:05, 07:15, 07:30, 07:45, 07:45, 08:00, 08:15, 08:30, 08:45, 09:00, 09:15, 09:30, 09:45, 10:00, 10:15, 10:30, 10:45, 11:00, 11:15, 11:30, 11:45, 12:00, 12:30, 12:45, 13:20, 14:00, 14:15, 14:45, 15:30, 15:45, 16:00, 16:15, 16:30, 16:45, 17:00, 17:15, 17:30, 17:45, 18:00, 18:15, 18:30, 18:45, 19:15, 19:45, 20:00, 20:35",
+        "destination_departures": "Chunchale Gaon To Tapovan Via Kamatwada Trimurti Chowk Civil: 06:12, 06:32, 07:00, 07:17, 07:30, 07:45, 08:00, 08:20, 08:30, 08:50, 09:00, 09:20, 09:30, 09:50, 10:00, 10:20, 10:30, 10:50, 11:00, 11:30, 11:50, 12:00, 12:10, 12:20, 12:50, 13:00, 13:20, 13:30, 13:50, 14:30, 15:00, 15:15, 15:50, 16:30, 16:50, 17:00, 17:15, 17:40, 17:50, 18:00, 18:20, 18:32, 18:50, 19:00, 19:17, 19:28, 19:52, 20:12, 20:42, 21:02, 21:25"
+    },
+    {
+        "route_no": "129C",
+        "route_name": "Army Public School To Bhagur",
+        "source_departures": "Army Public School To Bhagur: 07:23, 07:25",
+        "destination_departures": "Bhagur To Army Public School: 13:00, 13:37"
+    },
+    {
+        "route_no": "129I",
+        "route_name": "Tapovan To Bhagur Via Indira Nagar Ashoka Marg",
+        "source_departures": "Tapovan To Bhagur Via Indira Nagar Ashoka Marg: 06:15, 06:30, 07:15, 07:45, 08:15, 08:15, 08:45, 09:20, 09:30, 10:00, 10:30, 11:00, 11:30, 12:00, 12:15, 13:00, 13:45, 14:15, 14:45, 15:00, 15:15, 16:00, 16:30, 17:00, 17:30, 18:00, 18:15, 18:30, 19:05",
+        "destination_departures": "Bhagur To Tapovan Terminus Via Ashoka Marg indira Nagar: 07:45, 08:00, 08:15, 08:45, 09:15, 09:45, 10:15, 10:45, 11:00, 11:30, 12:00, 12:30, 13:30, 14:17, 14:30, 15:15, 15:45, 16:15, 16:32, 16:45, 17:32, 18:00, 18:30, 19:00, 19:30, 19:47, 20:00, 20:35"
+    },
+    {
+        "route_no": "129I",
+        "route_name": "Tapovan Terminus To Army School Via Indira Nagar , Deolali Gaon",
+        "source_departures": "Tapovan Terminus To Army School Via Indira Nagar , Deolali Gaon: 05:55, 06:03, 06:03",
+        "destination_departures": "Army School To Tapovan Terminus Via Bhatia Deolali Gaon,Indira Nagar mumbai Naka: 13:50, 13:55"
+    },
+    {
+        "route_no": "130I",
+        "route_name": "Tapovan Terminus To Bhagur Via Shalimar,Ashoka Marg,Indira Nagar,Bytco Deolali Camp",
+        "source_departures": "Tapovan Terminus To Bhagur Via Shalimar,Ashoka Marg,Indira Nagar,Bytco Deolali Camp: 07:00, 07:30, 07:30, 08:00, 08:30, 08:30, 09:00, 09:15, 09:15, 09:45, 10:15, 10:45, 11:15, 11:45, 12:15, 12:40, 13:15, 13:30, 14:00, 14:30, 15:00, 16:00, 16:10, 16:45, 17:15, 17:45, 18:15, 19:30",
+        "destination_departures": "Bhagur To Tapovan Terminus Via Deolali Camp Bytco,Ashoka Marg,Indira nagar,Mumbai Naka Shalimar: 07:30, 08:30, 09:00, 09:30, 10:00, 10:30, 10:50, 11:15, 11:45, 12:15, 12:52, 13:15, 14:05, 14:45, 15:00, 15:30, 16:00, 16:30, 17:30, 17:55, 18:15, 18:45, 19:15, 19:45, 21:00"
+    },
+    {
+        "route_no": "131",
+        "route_name": "Tapovan To Girnare",
+        "source_departures": "Tapovan To Girnare: 05:50, 06:15, 06:58, 07:18, 08:10, 08:30, 08:38, 09:10, 09:30, 09:50, 10:10, 10:30, 10:55, 11:10, 11:30, 12:00, 12:20, 13:00, 13:30, 13:50, 14:20, 14:50, 15:10, 15:30, 16:00, 16:10, 16:20, 16:40, 16:55, 17:10, 17:30, 17:50, 18:20",
+        "destination_departures": "Girnare To Tapovan Via K.T.H.M College: 07:05, 07:25, 08:30, 08:50, 09:20, 09:45, 10:00, 10:25, 10:45, 11:00, 11:20, 11:40, 12:05, 12:20, 12:40, 13:10, 13:30, 14:10, 14:40, 15:00, 15:35, 16:00, 16:20, 16:40, 17:10, 17:22, 17:30, 17:52, 18:05, 18:22, 18:42, 19:02, 19:32"
+    },
+    {
+        "route_no": "132",
+        "route_name": "New CBS (Mico Circle) To Saykheda Via Lakhalgaon Odha",
+        "source_departures": "New CBS (Mico Circle) To Saykheda Via Lakhalgaon Odha: 06:15, 07:10, 08:00, 08:30, 08:45, 09:00, 09:30, 10:00, 10:45, 11:30, 12:00, 12:30, 13:15, 13:45, 14:15, 14:45, 14:45, 15:15, 15:45, 16:15, 16:45, 17:30, 18:00, 18:30, 19:30",
+        "destination_departures": "Saykheda To CBS(Mico circle) Via Odha Lakhalgaon: 06:15, 06:45, 07:30, 08:00, 08:30, 09:00, 09:30, 10:00, 10:15, 10:30, 11:00, 11:30, 12:15, 13:00, 13:30, 14:15, 14:45, 15:15, 15:45, 16:15, 17:00, 17:30, 17:45, 18:15"
+    },
+    {
+        "route_no": "132",
+        "route_name": "Panchavati Karanja To Saikheda Via Lakhalgaon",
+        "source_departures": "Panchavati Karanja To Saikheda Via Lakhalgaon: 07:45",
+        "destination_departures": "Saikheda To Panchavati Karanja Via Lakhalgaon: 19:00, 19:30"
+    },
+    {
+        "route_no": "132",
+        "route_name": "Tapovan To Saikheda Via Lakhalgaon",
+        "source_departures": "Tapovan To Saikheda Via Lakhalgaon: 06:50",
+        "destination_departures": ""
+    },
+    {
+        "route_no": "133",
+        "route_name": "Oney/Khervadi Chaufuli To Saikheda Via chandori",
+        "source_departures": "Oney/Khervadi Chaufuli To Saikheda Via chandori: 07:00",
+        "destination_departures": ""
+    },
+    {
+        "route_no": "133",
+        "route_name": "Civil Hospital To Saikheda Via Nimani Adgaon Sayyad Pimpri Khervadi",
+        "source_departures": "Civil Hospital To Saikheda Via Nimani Adgaon Sayyad Pimpri Khervadi: 06:30, 07:15, 08:00, 08:45, 09:30, 10:00, 10:45, 12:15, 13:30, 14:15, 15:00, 16:00, 17:00, 17:45, 19:30",
+        "destination_departures": "Saikheda To Civil Hospital Via Khervadi Sayyad Pimpri Adgaon Nimani: 06:30, 07:30, 08:15, 09:00, 09:45, 10:30, 11:15, 11:45, 12:30, 14:00, 15:15, 16:00, 16:45, 18:00, 18:45, 19:30"
+    },
+    {
+        "route_no": "133",
+        "route_name": "New CBS(Mico Circle) To Khervadi Gaon Via Nimani Syed Pimpri",
+        "source_departures": "New CBS(Mico Circle) To Khervadi Gaon Via Nimani Syed Pimpri: 18:30, 20:00",
+        "destination_departures": "Khervadi Gaon To New CBS(Mico Circle) Via Sayyed Pimpri Nimani: 06:00"
+    },
+    {
+        "route_no": "137",
+        "route_name": "Tapovan To Jategaon Via Pathardi Phata Villohli",
+        "source_departures": "Tapovan To Jategaon Via Pathardi Phata Villohli: 06:10, 08:45, 11:15, 15:00, 17:45",
+        "destination_departures": "Jategaon To Tapovan Via Villohli Pathardi Phata: 07:30, 10:00, 12:30, 16:15, 19:00"
+    },
+    {
+        "route_no": "144",
+        "route_name": "NEW CBS(Mico Circle) To Mohadi stand Via 10 Va Mail Adgaon",
+        "source_departures": "NEW CBS(Mico Circle) To Mohadi stand Via 10 Va Mail Adgaon: 07:40, 08:45, 09:45, 12:15, 14:10, 15:30, 16:15, 17:30, 19:00",
+        "destination_departures": "Mohadi stand To NEW C.B.S.(Mico Circle) Via 10 Va Mail Adgaon: 06:15, 07:00, 08:00, 09:00, 10:35, 11:15, 13:45, 15:45, 17:35, 18:00, 19:00"
+    },
+    {
+        "route_no": "144",
+        "route_name": "Tapovan To Mohadi stand Via Manudevi",
+        "source_departures": "Tapovan To Mohadi stand Via Manudevi: 05:50, 06:30, 06:30",
+        "destination_departures": ""
+    },
+    {
+        "route_no": "145",
+        "route_name": "Tapovan To Trimbakeshwar Via Shalimar Mela Busstand",
+        "source_departures": "Tapovan To Trimbakeshwar Via Shalimar Mela Busstand: 06:30, 07:10, 07:30, 07:50, 08:10, 08:30, 08:30, 09:00, 13:10, 13:40, 13:50, 14:20, 14:40, 15:10, 15:30, 16:20",
+        "destination_departures": "Trimbakeshwar To Tapovan Via Satpur Civil Mela Busstand: 10:30, 11:10, 11:20, 11:30, 11:55, 12:20, 12:30, 12:40, 13:00, 13:10, 13:20, 13:40, 13:50, 13:55, 14:40, 22:00"
+    },
+    {
+        "route_no": "146I",
+        "route_name": "Tapovan To Sinnar Via Indira Nagar,Ashoka Marg",
+        "source_departures": "Tapovan To Sinnar Via Indira Nagar,Ashoka Marg: 05:45, 06:15, 06:30, 06:45, 07:00, 07:15, 07:30, 08:00, 08:15, 08:20, 08:30, 08:45, 08:50, 09:00, 09:15, 09:15, 09:45, 10:00, 10:15, 10:30, 10:30, 10:45, 11:15, 11:50, 12:15, 12:45, 13:15, 14:00, 14:45, 14:50, 15:15, 15:20, 15:45, 16:00, 16:15, 16:30, 16:45, 17:00, 17:15, 17:30, 17:45, 18:00, 18:30, 19:00, 19:30, 20:00",
+        "destination_departures": "Sinnar To tapovan Via Indira Nagar,Ashoka Marg: 06:15, 06:30, 06:45, 06:45, 07:00, 07:15, 07:30, 08:00, 08:15, 08:30, 08:45, 09:00, 09:30, 09:45, 10:00, 10:10, 10:20, 10:30, 10:45, 11:00, 11:30, 11:45, 12:00, 12:15, 12:30, 13:00, 13:30, 14:00, 14:15, 14:30, 15:00, 16:00, 16:30, 16:45, 17:00, 17:15, 17:30, 17:45, 18:00, 18:15, 18:45, 19:00, 19:15, 19:30, 19:45"
+    },
+    {
+        "route_no": "148I",
+        "route_name": "Tapovan To Bhairavnath Nagar Via Mahamarg Ashoka Marg Upnagar Sailani Baba",
+        "source_departures": "Tapovan To Bhairavnath Nagar Via Mahamarg Ashoka Marg Upnagar Sailani Baba: 05:30, 06:30, 07:30, 08:30, 09:30, 10:30, 14:30, 15:30, 16:30, 17:30, 18:30, 19:30",
+        "destination_departures": "Bhairavnath Nagar To Tapovan Via Sailani Baba Upnagar Ashoka Marg Mahamarg: 06:30, 07:30, 08:30, 09:30, 10:30, 11:30, 15:30, 16:30, 17:30, 18:30, 19:30, 20:30"
+    },
+    {
+        "route_no": "151T",
+        "route_name": "Tapovan To Nashik Road Railway Station Via Nandur Naka Sailanibaba",
+        "source_departures": "Tapovan To Nashik Road Railway Station Via Nandur Naka Sailanibaba: 06:20, 07:00, 07:00, 13:35, 13:55, 14:15, 14:35, 14:55, 15:10, 15:55",
+        "destination_departures": "Nashik Road Railway Station To Tapovan Via Nandur Naka: 18:20, 18:35, 18:50, 19:10, 19:40, 19:50, 20:40, 23:20"
+    },
+    {
+        "route_no": "152",
+        "route_name": "New CBS(Mico circle) To Pimpalgaon Baswant / Wani Chaufuli Via Nimani Adgaon Ozar",
+        "source_departures": "New CBS(Mico circle) To Pimpalgaon Baswant / Wani Chaufuli Via Nimani Adgaon Ozar: 16:30, 17:00, 17:15, 17:30, 17:45, 18:00, 18:15, 18:30, 18:45, 19:00, 19:30",
+        "destination_departures": "Pimpalgaon Baswant / Wani Chaufuli To New CBS(Mico circle) Via Aurangabad Naka: 06:00, 06:30, 18:15, 18:45, 19:00"
+    },
+    {
+        "route_no": "152",
+        "route_name": "New CBS To Pimpalgaon Baswant /Mukhed Fhata Via Nimani Adgaon Ozar Wani Chaufuli",
+        "source_departures": "New CBS To Pimpalgaon Baswant /Mukhed Fhata Via Nimani Adgaon Ozar Wani Chaufuli: 06:10, 06:30, 06:45, 07:00, 07:15, 07:30, 07:45, 08:00, 08:00, 08:15, 08:35, 08:45, 09:00, 09:15, 09:45, 10:00, 10:15, 10:30, 10:45, 11:00, 11:30, 12:00, 12:30, 12:45, 13:00, 13:15, 13:30, 13:45, 14:00, 14:15, 14:30, 14:45, 15:00, 15:15, 15:30, 15:45, 16:00, 16:15",
+        "destination_departures": "Pimpalgaon Baswant /Mukhed Fhata To New CBS Via Wani Chaufuli Ozar Adgaon Nimani: 07:45, 08:15, 08:30, 08:45, 09:00, 09:15, 09:30, 09:45, 10:00, 10:15, 10:30, 10:45, 11:00, 11:30, 11:45, 12:00, 12:15, 12:30, 12:45, 13:10, 13:45, 14:15, 14:30, 14:45, 15:00, 15:15, 15:30, 15:45, 16:00, 16:15, 16:30, 16:45, 17:00, 17:15, 17:30, 17:45, 18:00"
+    },
+    {
+        "route_no": "152",
+        "route_name": "Pimpalgaon Baswant / Wani Chaufuli To Pimpalgaon Bus Stand Via Gopalbaba SamadhI",
+        "source_departures": "Pimpalgaon Baswant / Wani Chaufuli To Pimpalgaon Bus Stand Via Gopalbaba SamadhI: 20:15, 21:00",
+        "destination_departures": "Pimpalgaon Bus Stand To Pimpalgaon Baswant / Wani Chaufuli Via Niphad Phata: 05:55, 06:20"
+    },
+    {
+        "route_no": "160",
+        "route_name": "New CBS (Civil) To Kochargaon Via hmalabad Mungsara Aalandi Dam",
+        "source_departures": "New CBS (Civil) To Kochargaon Via hmalabad Mungsara Aalandi Dam: 09:00, 09:45, 12:30, 13:15, 17:35, 18:20",
+        "destination_departures": "Kochargaon Gaon To New CBS (Civil) Via Alandi Dam Mungsara Makhmalabad: 06:45, 07:30, 10:45, 11:30, 14:00, 14:45"
+    },
+    {
+        "route_no": "163",
+        "route_name": "New CBS To Bhujbal Knowledge City Via Nimani Hirawadi Hanuman nagar",
+        "source_departures": "New CBS To Bhujbal Knowledge City Via Nimani Hirawadi Hanuman nagar: 07:22, 09:17, 11:17, 14:02, 14:02, 16:02",
+        "destination_departures": ""
+    },
+    {
+        "route_no": "166",
+        "route_name": "Tapovan Depot To NashikRoad Depot Via Mahamarg Indira Nagar",
+        "source_departures": "Tapovan Depot To NashikRoad Depot Via Mahamarg Indira Nagar: 15:10",
+        "destination_departures": "NashikRoad Depot To Tapovan Depot Via Indira Nagar Mahamarg: 12:40"
+    },
+    {
+        "route_no": "170",
+        "route_name": "Tapovan To Mungsara Gaon Via KTHM College,Bapu Aashram, Chandshi",
+        "source_departures": "Tapovan To Mungsara Gaon Via KTHM College,Bapu Aashram, Chandshi: 07:00, 08:00, 09:00, 10:00, 11:15, 12:15, 13:05, 14:05, 15:00, 16:00, 17:15, 18:15",
+        "destination_departures": "Mungasara Gaon To Tapovan Via Chandshi Bapu Aashram,,K.T.H.M College: 08:00, 09:00, 10:15, 11:15, 12:10, 13:10, 14:00, 15:00, 16:15, 17:15, 18:15, 19:15"
+    },
+    {
+        "route_no": "199",
+        "route_name": "Tapovan To New CBS/Civil Hospital Via MICO CIRCAL",
+        "source_departures": "Tapovan To New CBS/Civil Hospital Via MICO CIRCAL: 05:45, 05:50, 06:00, 06:10, 06:15, 06:25, 06:40, 06:45, 06:50, 06:55, 07:02, 07:10, 07:12, 07:55, 08:05, 08:25, 08:40, 08:55, 09:40, 09:40, 13:50, 14:40, 14:45, 15:00, 15:15, 15:35, 15:40, 15:45, 15:50, 17:15, 17:50, 18:55, 19:10",
+        "destination_departures": ""
+    },
+    {
+        "route_no": "245A",
+        "route_name": "Nashik Road Railway Station To Trambkeshhwar Via Nimani Mela Stand",
+        "source_departures": "Nashik Road Railway Station To Trambkeshhwar Via Nimani Mela Stand: 07:00, 07:40, 08:35, 08:50, 09:10, 09:30, 10:20, 10:30, 10:40, 11:10, 11:20, 11:40, 11:50, 12:00, 12:30,",
+        "destination_departures": "Trimbakeshwar To Nashik Road Railway Station Via Nandur Naka: 06:30, 06:50, 07:10, 07:40, 08:00, 08:20, 08:30, 08:40, 09:00, 09:10, 09:20, 09:40, 09:50, 10:00, 10:40,"
+    },
+    {
+        "route_no": "245A",
+        "route_name": "Nashik Road Depot To Trambkeshhwar Via Nimani Mela Stand",
+        "source_departures": "Nashik Road Depot To Trambkeshhwar Via Nimani Mela Stand: 04:20, 04:50, 05:10, 05:30, 05:50, 06:20",
+        "destination_departures": "Trambkeshhwar To Nashik Road Depot Via Nimani Nandur Naka: 18:30, 19:15, 19:50, 20:00, 20:10, 20:30"
+    },
+    {
+        "route_no": "245Exp",
+        "route_name": "Nashik Road To Trambkeshwar Via Vijay Mamata Indira Nagar City Centre Mall Satpur",
+        "source_departures": "Nashik Road To Trambkeshwar Via Vijay Mamata Indira Nagar City Centre Mall Satpur: 10:00, 11:00",
+        "destination_departures": ""
+    },
+    {
+        "route_no": "260",
+        "route_name": "Nashik Road Depot To Makhamalabad Via Ashoka Marg",
+        "source_departures": "Nashik Road Depot To Makhamalabad Via Ashoka Marg: 08:00, 10:30, 17:00, 19:00, 19:20",
+        "destination_departures": ""
+    },
+    {
+        "route_no": "260A",
+        "route_name": "Nashik Road Depot To Mungsara Gao Via Ashoka Marg",
+        "source_departures": "Nashik Road Depot To Mungsara Gao Via Ashoka Marg: 07:05, 09:10, 16:20, 21:45",
+        "destination_departures": "Mungasara Gao To Nashik Road Depot Via Indira Nagar: 06:00, 06:45, 08:05, 10:30, 17:40"
+    },
+    {
+        "route_no": "260A",
+        "route_name": "Tapovan To Mungsara Via Malegaon stand, Makhmalabad",
+        "source_departures": "Tapovan To Mungsara Via Malegaon stand, Makhmalabad: 05:17",
+        "destination_departures": ""
+    },
+    {
+        "route_no": "99P",
+        "route_name": "Tapovan To Panchavati Karanja Via Chh. Sambhaji Maharaj Naka",
+        "source_departures": "Tapovan To Panchavati Karanja Via Chh. Sambhaji Maharaj Naka: 07:30",
+        "destination_departures": ""
+    }
+]
