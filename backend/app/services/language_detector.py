@@ -140,6 +140,55 @@ class MultilingualDetector:
             )
 
         # -------------------------------------------------------------
+        # -------------------------------------------------------------
+        # Branch 0: Explicit Language Switch Commands (P0 Priority)
+        # -------------------------------------------------------------
+        t_low = clean_text.lower()
+        if any(re.search(pat, t_low, re.IGNORECASE) for pat in [
+            r'(?:मुझसे\s+|माझ्यासोबत\s+)?हिंदी(?:में|मध्ये|त)?\s*(?:बात\s*करो|बोलिए|बोलो|बोल|सांगा|बताओ)',
+            r'\b(?:speak|talk)\s+(?:with\s+me\s+)?(?:in\s+)?hindi\b',
+            r'(?:हिंदी\s*बोलिए|हिंदी\s*बोलो|हिंदी\s*में\s*बात\s*करो|हिंदी\s*में\s*बोलो)',
+            r'^(?:हिंदी|hindi)$'
+        ]):
+            return LanguageDetectionResult(
+                language="hi-IN",
+                confidence=1.0,
+                script=script,
+                is_code_switched=False,
+                is_transliterated=False,
+                reason="Explicit user command to switch to Hindi"
+            )
+
+        if any(re.search(pat, t_low, re.IGNORECASE) for pat in [
+            r'(?:माझ्यासोबत\s+)?मराठी(?:मध्ये|त)?\s*(?:बोल|बोला|सांगा|करा)',
+            r'\b(?:speak|talk)\s+(?:with\s+me\s+)?(?:in\s+)?marathi\b',
+            r'(?:मराठी\s*बोला|मराठी\s*बोल|मराठी\s*भाषा\s*करा)',
+            r'^(?:मराठी|marathi)$'
+        ]):
+            return LanguageDetectionResult(
+                language="mr-IN",
+                confidence=1.0,
+                script=script,
+                is_code_switched=False,
+                is_transliterated=False,
+                reason="Explicit user command to switch to Marathi"
+            )
+
+        if any(re.search(pat, t_low, re.IGNORECASE) for pat in [
+            r'\b(?:speak|talk)\s+(?:with\s+me\s+)?(?:in\s+)?english\b',
+            r'(?:इंग्रजीत|इंग्लिशमध्ये|इंग्रजीमध्ये)\s*(?:बोल|बोला|सांगा)',
+            r'\bplease\s+(?:talk|speak)\s+in\s+english\b',
+            r'^(?:इंग्रजी|इंग्लिश|english)$'
+        ]):
+            return LanguageDetectionResult(
+                language="en-IN",
+                confidence=1.0,
+                script=script,
+                is_code_switched=False,
+                is_transliterated=False,
+                reason="Explicit user command to switch to English"
+            )
+
         # Branch A: Devanagari Script (Marathi vs Hindi)
         # -------------------------------------------------------------
         if script == "devanagari" or (script == "mixed" and len(re.findall(r'[\u0900-\u097F]', clean_text)) > len(re.findall(r'[a-zA-Z]', clean_text))):

@@ -306,6 +306,34 @@ function handleServerMessage(data) {
       console.log('Voice-to-Map Action received:', data);
       handleMapAction(data);
       break;
+
+    case 'call_warning':
+      console.warn('Call duration warning:', data);
+      if (data.text) {
+        appendTranscriptBubble('assistant', data.text, data.language);
+      }
+      setMicStage('Call Limit: 20s remaining', 'pill-warning');
+      break;
+
+    case 'call_terminated':
+      console.warn('Call terminated by server:', data);
+      stopAudioPlayback();
+      if (typeof stopRecording === 'function' && state.isRecording) {
+        stopRecording();
+      }
+      setAgentState('idle', 'Call Ended', data.message || 'Call reached 3-minute limit.');
+      setMicStage('Call Ended (3 min limit)', 'pill-offline');
+      break;
+
+    case 'call_rejected':
+      console.warn('Call rejected by server:', data);
+      stopAudioPlayback();
+      if (typeof stopRecording === 'function' && state.isRecording) {
+        stopRecording();
+      }
+      setAgentState('idle', 'Limit Exceeded', data.message || 'Daily call limit exceeded.');
+      setMicStage('Daily Limit Exceeded', 'pill-offline');
+      break;
   }
 }
 
@@ -527,6 +555,17 @@ function onAudioPlaybackEnded() {
     state.isPlayingAudio = false;
     state.bargeInConsecutiveFrames = 0;
     state.lastVoiceTime = Date.now();
+
+    if (state.ws && state.ws.readyState === WebSocket.OPEN && state.currentTurnId) {
+      try {
+        state.ws.send(JSON.stringify({
+          type: 'audio_playback_completed',
+          turn_id: state.currentTurnId
+        }));
+      } catch (e) {
+        // WebSocket closing
+      }
+    }
 
     if (state.isRecording) {
       setAgentState('listening', 'Listening...', 'Speak now in Marathi, Hindi, or English.');

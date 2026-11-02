@@ -119,13 +119,27 @@ class SarvamTTSClient:
 
                 if response.status_code != 200:
                     err_msg = f"Sarvam TTS failed with status {response.status_code}: {response.text}"
-                    logger.error(err_msg)
-                    raise SarvamAPIError(err_msg, details={"status": response.status_code, "response": response.text})
+                    logger.warning(f"{err_msg}. Falling back to simulation chime tone.")
+                    chime_bytes = generate_chime_wav(0.6, 523.25)
+                    return {
+                        "audio_base64": base64.b64encode(chime_bytes).decode('ascii'),
+                        "format": "audio/wav",
+                        "language_code": language_code,
+                        "is_simulation": True,
+                        "error": err_msg
+                    }
 
                 res_json = response.json()
                 audios = res_json.get("audios", [])
                 if not audios or not audios[0]:
-                    raise SarvamAPIError("Sarvam TTS returned empty audio list")
+                    logger.warning("Sarvam TTS returned empty audio list. Falling back to chime.")
+                    chime_bytes = generate_chime_wav(0.6, 523.25)
+                    return {
+                        "audio_base64": base64.b64encode(chime_bytes).decode('ascii'),
+                        "format": "audio/wav",
+                        "language_code": language_code,
+                        "is_simulation": True
+                    }
 
                 audio_b64 = audios[0]
                 logger.info(f"Synthesized TTS audio: {len(audio_b64)} b64 chars for text '{clean_text[:40]}...'")
@@ -137,9 +151,16 @@ class SarvamTTSClient:
                     "request_id": res_json.get("request_id")
                 }
 
-        except httpx.RequestError as e:
-            logger.error(f"Network error calling Sarvam TTS: {e}")
-            raise SarvamAPIError(f"Network connection error to Sarvam TTS: {e}")
+        except (httpx.RequestError, Exception) as e:
+            logger.warning(f"Error calling Sarvam TTS: {e}. Falling back to chime.")
+            chime_bytes = generate_chime_wav(0.6, 523.25)
+            return {
+                "audio_base64": base64.b64encode(chime_bytes).decode('ascii'),
+                "format": "audio/wav",
+                "language_code": language_code,
+                "is_simulation": True,
+                "error": str(e)
+            }
 
 # Global singleton
 tts_client = SarvamTTSClient()

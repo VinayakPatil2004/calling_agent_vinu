@@ -33,7 +33,11 @@ VERIFIED_PHYSICAL_HOSPITALS = [
         "hospital_id": "civil_hospital",
         "name_en": "District Civil Hospital, Nashik",
         "name_mr": "जिल्हा सामान्य रुग्णालय, नाशिक",
-        "aliases": ["civil hospital", "civil", "सिव्हिल हॉस्पिटल", "सिव्हील", "जिल्हा रुग्णालय", "सिव्हिल"],
+        "aliases": [
+            "civil hospital", "civil", "सिव्हिल हॉस्पिटल", "सिव्हील", "जिल्हा रुग्णालय", "सिव्हिल",
+            "सिविल हॉस्पिटल", "सिविल", "सिविल अस्पताल", "सिविल रुग्णालय",
+            "सिफिल", "सिफिल हॉस्पिटल", "सिफिल अस्पताल", "सिफिल रुग्णालय", "siphil", "siphil hospital"
+        ],
         "physical_lat": 19.99580,
         "physical_lon": 73.77880,
         "address": "Old Agra Road, Near Trimbak Naka, CBS, Nashik 422001",
@@ -56,8 +60,8 @@ VERIFIED_PHYSICAL_HOSPITALS = [
     {
         "hospital_id": "bytco_hospital",
         "name_en": "Bytco Municipal Hospital, Nashik Road",
-        "name_mr": "बायको महानगरपालिका रुग्णालय, नाशिक रोड",
-        "aliases": ["bytco hospital", "bytco", "बायको हॉस्पिटल", "बायको रुग्णालय", "nashik road municipal hospital"],
+        "name_mr": "बिटको महानगरपालिका रुग्णालय, नाशिक रोड",
+        "aliases": ["bitco hospital", "bitco", "बिटको", "बिटको रुग्णालय", "बिटको हॉस्पिटल", "bytco hospital", "bytco", "बायको हॉस्पिटल", "बायको रुग्णालय", "बायको", "nashik road municipal hospital", "nashik road hospital"],
         "physical_lat": 19.94300,
         "physical_lon": 73.84150,
         "address": "Bytco Point, Near Nashik Road Railway Station, Nashik Road 422101",

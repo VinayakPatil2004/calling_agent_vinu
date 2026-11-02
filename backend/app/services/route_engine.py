@@ -373,6 +373,78 @@ class TransitRouteEngine:
                     is_ambiguous=False
                 )
 
+            # Special verified mapping for Panchavati (Panchavati Karanja / Depot Corner terminus)
+            if matched_alias_canonical == "panchavati" or clean_q in (
+                "panchavati", "पंचवटी", "पंचवडी", "panchavadi", "पंचवडीला", "पंचवटीला",
+                "पंचवटी कारंजा", "panchavati karanja", "पंचवडी कारंजा"
+            ):
+                matched_sids = {691, 694, 704, 707, 956, 1194}
+                canonical_name = "panchavati"
+                display_name = "Panchavati"
+                return ResolvedPlace(
+                    query_text=place_query,
+                    canonical_name=canonical_name,
+                    display_name=display_name,
+                    matched_station_ids=sorted(list(matched_sids)),
+                    sample_stops=["Panchavati Karanja (D)", "Panchavati Karanja 1 (U)", "Panchavati Depot Corner (U)", "Panchavati Depot Corner (D)"],
+                    is_ambiguous=False
+                )
+
+            # Special verified mapping for Nashik Road (Depot / Railway Station cluster)
+            if matched_alias_canonical == "nashik road" or clean_q in (
+                "nashik road", "नाशिक रोड", "नासिक रोड", "हाशिकरोड", "हाशिक रोड", "हाशिकरोडला",
+                "नाशिकरोड", "nashikroad", "railway station", "रेल्वे स्टेशन", "nashik road railway station"
+            ):
+                matched_sids = {529, 530, 787, 1440, 1683}
+                canonical_name = "nashik road"
+                display_name = "Nashik Road"
+                return ResolvedPlace(
+                    query_text=place_query,
+                    canonical_name=canonical_name,
+                    display_name=display_name,
+                    matched_station_ids=sorted(list(matched_sids)),
+                    sample_stops=["Nashik Road Depot", "Datta Mandir (Nashik Road) (D)", "Datta Mandir (Nashik Road) (U)", "Nashik Road Railway Station"],
+                    is_ambiguous=False
+                )
+
+            # Special verified mapping for Civil Hospital
+            if matched_alias_canonical == "civil hospital" or clean_q in (
+                "civil hospital", "सिव्हिल हॉस्पिटल", "सिव्हिल", "civil", "सिविल हॉस्पिटल",
+                "सिविल", "सिविल अस्पताल", "सिव्हिल रुग्णालय", "सिविल रुग्णालय",
+                "सिफिल", "सिफिल हॉस्पिटल", "सिफिल अस्पताल", "सिफिल रुग्णालय",
+                "siphil", "siphil hospital"
+            ):
+                matched_sids = {396, 814, 1184, 1590}
+                canonical_name = "civil hospital"
+                display_name = "Civil Hospital"
+                return ResolvedPlace(
+                    query_text=place_query,
+                    canonical_name=canonical_name,
+                    display_name=display_name,
+                    matched_station_ids=sorted(list(matched_sids)),
+                    sample_stops=["New CBS/Civil Hospital(D)", "Civil Hospital (D)", "Civil Hospital (U)", "New CBS/Civil Hospital(U)"],
+                    is_ambiguous=False
+                )
+
+            # Special verified mapping for Thakkar Bazar / CBS
+            if matched_alias_canonical == "thakkar bazar" or clean_q in (
+                "thakkar bazar", "thakkar bazaar", "thakkar bazzar", "thakar bazar",
+                "ठक्कर बाजार", "ठक्कर बाझार", "ठाकर बाजार",
+                "ठक्कर बाजार बस स्थानक", "ठक्कर बाजार बस स्टँड", "thakkar bazar bus stand",
+                "ठक्कर बाजारला", "ठक्कर बाजारातून"
+            ):
+                matched_sids = {82, 313, 315, 317, 955, 975, 1017, 1184, 1590}
+                canonical_name = "cbs"
+                display_name = "Thakkar Bazar / CBS"
+                return ResolvedPlace(
+                    query_text=place_query,
+                    canonical_name=canonical_name,
+                    display_name=display_name,
+                    matched_station_ids=sorted(list(matched_sids)),
+                    sample_stops=["CBS 1 (U)", "CBS 2 (U)", "CBS 3 (U)", "CBS/Mela Stand (U)", "New CBS/Civil Hospital(U)"],
+                    is_ambiguous=False
+                )
+
             # Special verified mapping for Anandavalli
             if matched_alias_canonical == "anandavalli" or clean_q in ("anandavalli", "aanandavalli", "आनंदवल्ली", "आनंदवली"):
                 matched_sids = {427, 1105}
@@ -417,7 +489,7 @@ class TransitRouteEngine:
 
             # Special verified mapping for Dwarka Circle
             if matched_alias_canonical == "dwarka" or clean_q in ("dwarka", "dwarka circle", "द्वारका", "द्वारका सर्कल"):
-                matched_sids = {497, 1078, 1049, 1050, 1287}
+                matched_sids = {497, 1078, 1287}
                 canonical_name = "dwarka"
                 display_name = "Dwarka Circle (Boarding: Kathe Galli / Nagji Hospital)"
                 return ResolvedPlace(
@@ -430,7 +502,7 @@ class TransitRouteEngine:
                 )
 
             # Special verified mapping for Datta Mandir (Nashik Road primary junction)
-            if matched_alias_canonical == "datta mandir" or clean_q in ("datta mandir", "दत्त मंदिर", "दत्त मंदीर", "दत्तमंदिर", "दत्ता मंदिर", "दत्ता मंदीर", "दत्तामंदिर", "datta mandir nashik road", "दत्त मंदिर नाशिक रोड", "दत्ता मंदिर नाशिक रोड"):
+            if matched_alias_canonical == "datta mandir" or clean_q in ("datta mandir", "datt mandir", "दत्त मंदिर", "दत्त मंदीर", "दत्तमंदिर", "दत्ता मंदिर", "दत्ता मंदीर", "दत्तामंदिर", "datta mandir nashik road", "datt mandir nashik road", "दत्त मंदिर नाशिक रोड", "दत्ता मंदिर नाशिक रोड"):
                 matched_sids = {529, 530}
                 canonical_name = "datta mandir"
                 display_name = "Datta Mandir (Nashik Road)"
@@ -631,6 +703,9 @@ class TransitRouteEngine:
         for d in raw_directs:
             b_node = d["boarding_stop"]
             a_node = d["alighting_stop"]
+            # Strict Journey Destination Validation: ensure alighting stop reaches requested destination
+            if a_node.station_id not in dest_sids:
+                continue
             t_info = d["trip_info"]
 
             b_stop = StopInfo(
@@ -755,6 +830,10 @@ class TransitRouteEngine:
             a1 = l1["alighting_stop"]
             b2 = l2["boarding_stop"]
             a2 = l2["alighting_stop"]
+
+            # Strict Journey Destination Validation: ensure final alighting stop reaches requested destination
+            if a2.station_id not in dest_sids:
+                continue
 
             t_leg1 = TransferLeg(
                 leg_number=1,
@@ -1104,6 +1183,253 @@ class TransitRouteEngine:
                     summary_text_hi=f"2 बस बदलें: {tr2['interchange_hub_1']} (रूट {l1['rno']} -> {l2['rno']}) और {tr2['interchange_hub_2']} (रूट {l2['rno']} -> {l3['rno']})।",
                     summary_text_en=f"2 transfers: at {tr2['interchange_hub_1']} (Route {l1['rno']} -> {l2['rno']}) and {tr2['interchange_hub_2']} (Route {l2['rno']} -> {l3['rno']})."
                 ))
+
+        # -------------------------------------------------------------
+        # 3B. 3-Transfer Routes Search (Multi-Hop) when needed (Phase 4.8)
+        # -------------------------------------------------------------
+        has_feasible_journey = any(pj.is_timetable_feasible for pj in planned_journeys)
+        if (len(planned_journeys) == 0 or not has_feasible_journey):
+            raw_three_transfers = transit_graph.find_three_transfer_paths(
+                origin_sids,
+                dest_sids,
+                departure_mins=dep_mins_used,
+                limit=3
+            )
+            for tr3 in raw_three_transfers:
+                l1 = tr3["leg1"]
+                l2 = tr3["leg2"]
+                l3 = tr3["leg3"]
+                l4 = tr3["leg4"]
+
+                j1 = JourneyLeg(
+                    leg_number=1,
+                    route_id=l1["route_id"],
+                    rno=l1["rno"],
+                    route_name=l1["route_name"],
+                    route_type="Standard",
+                    boarding_stop=StopInfo(
+                        station_id=l1["boarding_stop"].station_id,
+                        name=l1["boarding_stop"].station_name,
+                        display_name=l1["boarding_stop"].display_name,
+                        sequence=l1["boarding_stop"].sequence,
+                        distance_from_origin_km=l1["boarding_stop"].total_distance_km,
+                        lat=l1["boarding_stop"].lat,
+                        lon=l1["boarding_stop"].lon,
+                        direction=location_service._determine_direction(l1["boarding_stop"].station_name)
+                    ),
+                    alighting_stop=StopInfo(
+                        station_id=l1["alighting_stop"].station_id,
+                        name=l1["alighting_stop"].station_name,
+                        display_name=l1["alighting_stop"].display_name,
+                        sequence=l1["alighting_stop"].sequence,
+                        distance_from_origin_km=l1["alighting_stop"].total_distance_km,
+                        lat=l1["alighting_stop"].lat,
+                        lon=l1["alighting_stop"].lon,
+                        direction=location_service._determine_direction(l1["alighting_stop"].station_name)
+                    ),
+                    intermediate_stops_count=l1["stops_count"],
+                    intermediate_stops=[],
+                    distance_km=l1["distance_km"],
+                    trip_id=l1["trip_info"]["trip_id"] if l1["trip_info"] else None,
+                    vehicle_no=l1["trip_info"]["vehicle_no"] if l1["trip_info"] else None,
+                    departure_time=l1["trip_info"]["departure_str"] if l1["trip_info"] else None,
+                    departure_mins=l1["trip_info"]["departure_mins"] if l1["trip_info"] else None,
+                    arrival_time=l1["trip_info"]["arrival_str"] if l1["trip_info"] else None,
+                    arrival_mins=l1["trip_info"]["arrival_mins"] if l1["trip_info"] else None,
+                    duration_mins=l1["trip_info"]["duration_mins"] if l1["trip_info"] else 20,
+                    timetable_trips_count=l1["trips_count"],
+                    scheduled_departures=l1["departures"]
+                )
+
+                j2 = JourneyLeg(
+                    leg_number=2,
+                    route_id=l2["route_id"],
+                    rno=l2["rno"],
+                    route_name=l2["route_name"],
+                    route_type="Standard",
+                    boarding_stop=StopInfo(
+                        station_id=l2["boarding_stop"].station_id,
+                        name=l2["boarding_stop"].station_name,
+                        display_name=l2["boarding_stop"].display_name,
+                        sequence=l2["boarding_stop"].sequence,
+                        distance_from_origin_km=l2["boarding_stop"].total_distance_km,
+                        lat=l2["boarding_stop"].lat,
+                        lon=l2["boarding_stop"].lon,
+                        direction=location_service._determine_direction(l2["boarding_stop"].station_name)
+                    ),
+                    alighting_stop=StopInfo(
+                        station_id=l2["alighting_stop"].station_id,
+                        name=l2["alighting_stop"].station_name,
+                        display_name=l2["alighting_stop"].display_name,
+                        sequence=l2["alighting_stop"].sequence,
+                        distance_from_origin_km=l2["alighting_stop"].total_distance_km,
+                        lat=l2["alighting_stop"].lat,
+                        lon=l2["alighting_stop"].lon,
+                        direction=location_service._determine_direction(l2["alighting_stop"].station_name)
+                    ),
+                    intermediate_stops_count=l2["stops_count"],
+                    intermediate_stops=[],
+                    distance_km=l2["distance_km"],
+                    trip_id=l2["trip_info"]["trip_id"] if l2["trip_info"] else None,
+                    vehicle_no=l2["trip_info"]["vehicle_no"] if l2["trip_info"] else None,
+                    departure_time=l2["trip_info"]["departure_str"] if l2["trip_info"] else None,
+                    departure_mins=l2["trip_info"]["departure_mins"] if l2["trip_info"] else None,
+                    arrival_time=l2["trip_info"]["arrival_str"] if l2["trip_info"] else None,
+                    arrival_mins=l2["trip_info"]["arrival_mins"] if l2["trip_info"] else None,
+                    duration_mins=l2["trip_info"]["duration_mins"] if l2["trip_info"] else 20,
+                    timetable_trips_count=l2["trips_count"],
+                    scheduled_departures=l2["departures"]
+                )
+
+                j3 = JourneyLeg(
+                    leg_number=3,
+                    route_id=l3["route_id"],
+                    rno=l3["rno"],
+                    route_name=l3["route_name"],
+                    route_type="Standard",
+                    boarding_stop=StopInfo(
+                        station_id=l3["boarding_stop"].station_id,
+                        name=l3["boarding_stop"].station_name,
+                        display_name=l3["boarding_stop"].display_name,
+                        sequence=l3["boarding_stop"].sequence,
+                        distance_from_origin_km=l3["boarding_stop"].total_distance_km,
+                        lat=l3["boarding_stop"].lat,
+                        lon=l3["boarding_stop"].lon,
+                        direction=location_service._determine_direction(l3["boarding_stop"].station_name)
+                    ),
+                    alighting_stop=StopInfo(
+                        station_id=l3["alighting_stop"].station_id,
+                        name=l3["alighting_stop"].station_name,
+                        display_name=l3["alighting_stop"].display_name,
+                        sequence=l3["alighting_stop"].sequence,
+                        distance_from_origin_km=l3["alighting_stop"].total_distance_km,
+                        lat=l3["alighting_stop"].lat,
+                        lon=l3["alighting_stop"].lon,
+                        direction=location_service._determine_direction(l3["alighting_stop"].station_name)
+                    ),
+                    intermediate_stops_count=l3["stops_count"],
+                    intermediate_stops=[],
+                    distance_km=l3["distance_km"],
+                    trip_id=l3["trip_info"]["trip_id"] if l3["trip_info"] else None,
+                    vehicle_no=l3["trip_info"]["vehicle_no"] if l3["trip_info"] else None,
+                    departure_time=l3["trip_info"]["departure_str"] if l3["trip_info"] else None,
+                    departure_mins=l3["trip_info"]["departure_mins"] if l3["trip_info"] else None,
+                    arrival_time=l3["trip_info"]["arrival_str"] if l3["trip_info"] else None,
+                    arrival_mins=l3["trip_info"]["arrival_mins"] if l3["trip_info"] else None,
+                    duration_mins=l3["trip_info"]["duration_mins"] if l3["trip_info"] else 20,
+                    timetable_trips_count=l3["trips_count"],
+                    scheduled_departures=l3["departures"]
+                )
+
+                j4 = JourneyLeg(
+                    leg_number=4,
+                    route_id=l4["route_id"],
+                    rno=l4["rno"],
+                    route_name=l4["route_name"],
+                    route_type="Standard",
+                    boarding_stop=StopInfo(
+                        station_id=l4["boarding_stop"].station_id,
+                        name=l4["boarding_stop"].station_name,
+                        display_name=l4["boarding_stop"].display_name,
+                        sequence=l4["boarding_stop"].sequence,
+                        distance_from_origin_km=l4["boarding_stop"].total_distance_km,
+                        lat=l4["boarding_stop"].lat,
+                        lon=l4["boarding_stop"].lon,
+                        direction=location_service._determine_direction(l4["boarding_stop"].station_name)
+                    ),
+                    alighting_stop=StopInfo(
+                        station_id=l4["alighting_stop"].station_id,
+                        name=l4["alighting_stop"].station_name,
+                        display_name=l4["alighting_stop"].display_name,
+                        sequence=l4["alighting_stop"].sequence,
+                        distance_from_origin_km=l4["alighting_stop"].total_distance_km,
+                        lat=l4["alighting_stop"].lat,
+                        lon=l4["alighting_stop"].lon,
+                        direction=location_service._determine_direction(l4["alighting_stop"].station_name)
+                    ),
+                    intermediate_stops_count=l4["stops_count"],
+                    intermediate_stops=[],
+                    distance_km=l4["distance_km"],
+                    trip_id=l4["trip_info"]["trip_id"] if l4["trip_info"] else None,
+                    vehicle_no=l4["trip_info"]["vehicle_no"] if l4["trip_info"] else None,
+                    departure_time=l4["trip_info"]["departure_str"] if l4["trip_info"] else None,
+                    departure_mins=l4["trip_info"]["departure_mins"] if l4["trip_info"] else None,
+                    arrival_time=l4["trip_info"]["arrival_str"] if l4["trip_info"] else None,
+                    arrival_mins=l4["trip_info"]["arrival_mins"] if l4["trip_info"] else None,
+                    duration_mins=l4["trip_info"]["duration_mins"] if l4["trip_info"] else 20,
+                    timetable_trips_count=l4["trips_count"],
+                    scheduled_departures=l4["departures"]
+                )
+
+                tp1 = TransferPoint(
+                    from_leg_number=1,
+                    to_leg_number=2,
+                    interchange_hub=tr3["interchange1"],
+                    interchange_hub_mr=tr3["interchange1"],
+                    transfer_from_stop=j1.alighting_stop,
+                    transfer_to_stop=j2.boarding_stop,
+                    walk_distance_m=tr3["transfer1"]["walk_distance_m"],
+                    walk_time_mins=tr3["transfer1"]["walk_time_mins"],
+                    wait_time_mins=tr3["transfer1"]["wait_time_mins"],
+                    description=f"Transfer at {tr3['interchange1']}"
+                )
+
+                tp2 = TransferPoint(
+                    from_leg_number=2,
+                    to_leg_number=3,
+                    interchange_hub=tr3["interchange2"],
+                    interchange_hub_mr=tr3["interchange2"],
+                    transfer_from_stop=j2.alighting_stop,
+                    transfer_to_stop=j3.boarding_stop,
+                    walk_distance_m=tr3["transfer2"]["walk_distance_m"],
+                    walk_time_mins=tr3["transfer2"]["walk_time_mins"],
+                    wait_time_mins=tr3["transfer2"]["wait_time_mins"],
+                    description=f"Transfer at {tr3['interchange2']}"
+                )
+
+                tp3 = TransferPoint(
+                    from_leg_number=3,
+                    to_leg_number=4,
+                    interchange_hub=tr3["interchange3"],
+                    interchange_hub_mr=tr3["interchange3"],
+                    transfer_from_stop=j3.alighting_stop,
+                    transfer_to_stop=j4.boarding_stop,
+                    walk_distance_m=tr3["transfer3"]["walk_distance_m"],
+                    walk_time_mins=tr3["transfer3"]["walk_time_mins"],
+                    wait_time_mins=tr3["transfer3"]["wait_time_mins"],
+                    description=f"Transfer at {tr3['interchange3']}"
+                )
+
+                f1 = self._compute_fare(l1["distance_km"])
+                f2 = self._compute_fare(l2["distance_km"])
+                f3 = self._compute_fare(l3["distance_km"])
+                f4 = self._compute_fare(l4["distance_km"])
+
+                planned_journeys.append(PlannedJourney(
+                    journey_id=f"transfer_3_{l1['rno']}_{l2['rno']}_{l3['rno']}_{l4['rno']}",
+                    transfers_count=3,
+                    legs_count=4,
+                    departure_time=j1.departure_time or dep_str_used,
+                    arrival_time=j4.arrival_time or dep_str_used,
+                    total_duration_mins=tr3["total_duration_mins"],
+                    total_distance_km=tr3["total_distance_km"],
+                    total_stops_count=tr3["total_stops_count"],
+                    total_fare_inr=f1 + f2 + f3 + f4,
+                    legs=[j1, j2, j3, j4],
+                    transfers=[tp1, tp2, tp3],
+                    is_timetable_feasible=tr3["is_feasible"],
+                    summary_text_mr=f"३ बस बदला: {tr3['interchange1']} (मार्ग {l1['rno']} -> {l2['rno']}), {tr3['interchange2']} (मार्ग {l2['rno']} -> {l3['rno']}), आणि {tr3['interchange3']} (मार्ग {l3['rno']} -> {l4['rno']}).",
+                    summary_text_hi=f"3 बस बदलें: {tr3['interchange1']}, {tr3['interchange2']}, {tr3['interchange3']}।",
+                    summary_text_en=f"3 transfers: via {tr3['interchange1']}, {tr3['interchange2']}, and {tr3['interchange3']}."
+                ))
+
+        # Rank planned journeys by feasibility, fewest transfers, shortest duration
+        planned_journeys.sort(key=lambda pj: (
+            not pj.is_timetable_feasible,
+            pj.transfers_count,
+            pj.total_duration_mins,
+            pj.total_stops_count
+        ))
 
         # -------------------------------------------------------------
         # 4. Fare Calculation

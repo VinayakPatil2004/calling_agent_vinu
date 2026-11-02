@@ -80,10 +80,68 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
 
     # Check caller phone if provided for call limit and duration restrictions
     caller_phone = websocket.query_params.get("caller_id") or websocket.query_params.get("phone") or websocket.headers.get("x-caller-id")
+    effective_phone = caller_phone or f"+9199990{abs(hash(session.session_id)) % 100000:05d}"
     call_registered = False
+    call_start_time = time.time()
+    warning_sent = False
 
+    async def _send_graceful_closing_warning(call_id: str):
+        nonlocal warning_sent
+        if warning_sent or session.is_interrupted:
+            return
+        warning_sent = True
+        curr_lang = session.current_language
+        closing_msgs = {
+            "mr-IN": "आपल्या कॉलची ३ मिनिटांची वेळ मर्यादा लवकरच संपत आहे. सिटीलिंकचा वापर केल्याबद्दल धन्यवाद, आपला दिवस सुखकर जावो!",
+            "hi-IN": "आपके कॉल की 3 मिनट की समय सीमा जल्द ही समाप्त हो रही है। सिटीलिंक का उपयोग करने के लिए धन्यवाद, आपका दिन शुभ हो!",
+            "en-IN": "Your 3-minute call limit is concluding shortly. Thank you for calling CityLinc, have a wonderful day!"
+        }
+        closing_text = closing_msgs.get(curr_lang, closing_msgs["mr-IN"])
+        logger.info(f"[GracefulClosing] Sending 20s pre-timeout notification for session {call_id} in {curr_lang}")
+        try:
+            await websocket.send_json({
+                "type": "call_warning",
+                "reason": "duration_approaching_limit",
+                "lead_seconds": 20,
+                "text": closing_text,
+                "language": curr_lang
+            })
+            tts_res = await tts_client.synthesize(text=closing_text, language_code=curr_lang)
+            audio_b64 = tts_res.get("audio_base64")
+            if audio_b64:
+                await websocket.send_json({"type": "status", "status": "speaking"})
+                await websocket.send_json({
+                    "type": "audio",
+                    "audio": audio_b64,
+                    "format": tts_res.get("format", "audio/mpeg"),
+                    "language": curr_lang,
+                    "is_closing": True
+                })
+        except Exception as ce:
+            logger.debug(f"[GracefulClosing] Error dispatching warning to websocket {call_id}: {ce}")
+
+    async def _enforce_ws_timeout(call_id: str):
+        try:
+            logger.info(f"Call duration limit ({settings.MAX_CALL_DURATION_SECONDS}s) reached for WebSocket session {call_id}")
+            term_msgs = {
+                "mr-IN": "कॉलची कमाल वेळ मर्यादा (३ मिनिटे) संपली आहे.",
+                "hi-IN": "कॉल की अधिकतम समय सीमा (3 मिनट) समाप्त हो गई है।",
+                "en-IN": "Call maximum duration limit (3 minutes) reached."
+            }
+            term_msg = term_msgs.get(session.current_language, term_msgs["mr-IN"])
+            await websocket.send_json({
+                "type": "call_terminated",
+                "reason": "max_duration_exceeded",
+                "message": term_msg
+            })
+            await websocket.close(code=4008, reason="Max call duration exceeded")
+        except Exception as e:
+            logger.debug(f"Error closing timed-out websocket {call_id}: {e}")
+
+    from backend.app.services.call_restriction_service import call_restriction_service, DAILY_LIMIT_EXCEEDED_MESSAGE_MR
+
+    # Daily call limit validation if explicit phone provided
     if caller_phone:
-        from backend.app.services.call_restriction_service import call_restriction_service, DAILY_LIMIT_EXCEEDED_MESSAGE_MR
         check = call_restriction_service.check_daily_call_limit(caller_phone)
         if not check.allowed:
             logger.warning(f"WebSocket caller {caller_phone} exceeded daily limit ({check.connected_count}/{settings.MAX_CONNECTED_CALLS_PER_DAY})")
@@ -97,36 +155,26 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
             await websocket.close(code=4003, reason="Daily call limit exceeded")
             return
 
-        async def _enforce_ws_timeout(call_id: str):
-            try:
-                logger.info(f"Call duration limit ({settings.MAX_CALL_DURATION_SECONDS}s) reached for WebSocket session {call_id}")
-                await websocket.send_json({
-                    "type": "call_terminated",
-                    "reason": "max_duration_exceeded",
-                    "message": "कॉलची कमाल वेळ मर्यादा (३ मिनिटे) संपली आहे."
-                })
-                await websocket.close(code=4008, reason="Max call duration exceeded")
-            except Exception as e:
-                logger.debug(f"Error closing timed-out websocket {call_id}: {e}")
+    reg = await call_restriction_service.register_connected_call(
+        provider_call_id=session.session_id,
+        caller_phone=effective_phone,
+        on_timeout_callback=_enforce_ws_timeout,
+        on_warning_callback=_send_graceful_closing_warning,
+        warning_lead_seconds=20
+    )
+    if not reg.allowed:
+        logger.warning(f"WebSocket caller {effective_phone} atomic register rejected ({reg.connected_count}/{settings.MAX_CONNECTED_CALLS_PER_DAY})")
+        await websocket.send_json({
+            "type": "call_rejected",
+            "reason": "daily_limit_exceeded",
+            "message": DAILY_LIMIT_EXCEEDED_MESSAGE_MR,
+            "limit": settings.MAX_CONNECTED_CALLS_PER_DAY,
+            "current_count": reg.connected_count
+        })
+        await websocket.close(code=4003, reason="Daily call limit exceeded")
+        return
 
-        reg = await call_restriction_service.register_connected_call(
-            provider_call_id=session.session_id,
-            caller_phone=caller_phone,
-            on_timeout_callback=_enforce_ws_timeout
-        )
-        if not reg.allowed:
-            logger.warning(f"WebSocket caller {caller_phone} atomic register rejected ({reg.connected_count}/{settings.MAX_CONNECTED_CALLS_PER_DAY})")
-            await websocket.send_json({
-                "type": "call_rejected",
-                "reason": "daily_limit_exceeded",
-                "message": DAILY_LIMIT_EXCEEDED_MESSAGE_MR,
-                "limit": settings.MAX_CONNECTED_CALLS_PER_DAY,
-                "current_count": reg.connected_count
-            })
-            await websocket.close(code=4003, reason="Daily call limit exceeded")
-            return
-
-        call_registered = True
+    call_registered = True
 
     # Send initial welcome and status
     await websocket.send_json({
@@ -176,6 +224,12 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                 })
                 continue
 
+            # 3B. Audio Playback Completion Confirmation from Client
+            if event_type in ("audio_playback_completed", "playback_completed"):
+                turn_id = event.get("turn_id")
+                logger.info(f"[AudioPlayback] Client confirmed audio playback completed for turn {turn_id}")
+                continue
+
             # 4. Incoming Voice Audio payload (Phase 4.4 Stage 2)
             if event_type == "audio":
                 b64_audio = event.get("data", "")
@@ -214,16 +268,23 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                     f"Duration: {duration_ms}ms | Client Lang: {req_lang}"
                 )
 
+                # Atomically start a new user turn (Phase 4.8 P0 Stale Response Prevention)
+                current_turn = session.start_user_turn()
+
                 # Notify client: Transcribing speech
                 await websocket.send_json({
                     "type": "status",
                     "status": "thinking",
                     "stage": "stt",
+                    "turn_id": current_turn,
                     "bytes_received": len(audio_bytes)
                 })
 
                 # Step 1: Sarvam STT Transcription with Latency Tracking (Scope E)
-                stt_req_lang = req_lang if req_lang in ("mr-IN", "hi-IN", "en-IN") else "unknown"
+                if session.has_explicit_language_preference:
+                    stt_req_lang = session.current_language
+                else:
+                    stt_req_lang = req_lang if req_lang in ("mr-IN", "hi-IN", "en-IN") else "unknown"
                 stt_start_time = time.perf_counter()
                 try:
                     stt_result = await stt_client.transcribe(
@@ -247,6 +308,11 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                 transcript = stt_result.get("transcript", "").strip()
                 sarvam_acoustic_lang = stt_result.get("language_code", "unknown")
                 stt_error = stt_result.get("error")
+
+                # Verify turn validity before processing (reject stale turns overtaken during async STT)
+                if not session.is_turn_valid(current_turn):
+                    logger.info(f"Turn {current_turn} superseded or interrupted during STT. Discarding result.")
+                    continue
 
                 # Scope C: Empty STT Transcript & Error Handling
                 if not transcript or stt_error:
@@ -310,35 +376,42 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                 )
 
                 # Multi-layered language detection combining acoustic STT + lexical analysis + context
+                eff_pref = session.current_language if session.has_explicit_language_preference else (req_lang if req_lang in ("mr-IN", "hi-IN", "en-IN") else None)
                 det_result = language_detector.detect(
                     text=transcript,
                     stt_language=sarvam_acoustic_lang,
                     context_language=session.current_language,
-                    user_preference=req_lang if req_lang in ("mr-IN", "hi-IN", "en-IN") else None
+                    user_preference=eff_pref
                 )
-                detected_lang = det_result.language
-
-                logger.info(f"Speech transcribed: Length: {transcript_len} chars, Words: {word_count} -> Detected Lang: {detected_lang} (conf: {det_result.confidence:.2f}, reason: {det_result.reason})")
-
-                is_lang_switched = (detected_lang != session.current_language)
-                if is_lang_switched:
-                    logger.info(f"Language switched dynamically: {session.current_language} -> {detected_lang}")
+                
+                is_explicit_cmd = bool(det_result.reason and "Explicit user command to switch" in det_result.reason)
+                if session.has_explicit_language_preference and not is_explicit_cmd:
+                    # Explicit session preference is locked; do not allow acoustic/lexical noise to override
+                    detected_lang = session.current_language
+                    is_lang_switched = False
+                else:
+                    detected_lang = det_result.language
+                    is_lang_switched = (detected_lang != session.current_language)
+                    if is_lang_switched or is_explicit_cmd:
+                        logger.info(f"Language switched: {session.current_language} -> {detected_lang} (explicit={is_explicit_cmd})")
+                        session.set_language(detected_lang, explicit=is_explicit_cmd)
 
                 # Send User transcript to UI
                 await websocket.send_json({
                     "type": "transcript",
                     "role": "user",
                     "text": transcript,
+                    "turn_id": current_turn,
                     "language": detected_lang,
                     "language_switched": is_lang_switched,
                     "previous_language": session.current_language
                 })
 
-                # Register message in session (updates session.current_language to detected_lang while preserving history)
-                current_turn = session.add_user_message(transcript, language=detected_lang)
+                # Register message in session
+                session.add_user_message(transcript, language=detected_lang, turn_id=current_turn)
 
                 # Check if user interrupted while we were processing
-                if session.is_interrupted or current_turn != session.current_turn_id:
+                if not session.is_turn_valid(current_turn):
                     logger.info(f"Turn {current_turn} canceled due to interruption.")
                     continue
 
@@ -350,46 +423,71 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                         "en-IN": "I could not hear clearly. Could you please repeat your query about routes, timings, or passes?"
                     }.get(detected_lang, "मला स्पष्ट समजले नाही. कृपया पुन्हा सांगा.")
                     reply = clarification
+                    speech_text = clarification
                 else:
-                    await websocket.send_json({"type": "status", "status": "thinking", "stage": "context"})
-                    ctx_turn = context_engine.process_turn(session.session_id, transcript, language=detected_lang)
+                    await websocket.send_json({"type": "status", "status": "thinking", "stage": "context", "turn_id": current_turn})
+                    ctx_turn = context_engine.process_turn(session.session_id, transcript, language=detected_lang, turn_id=current_turn)
+                    if ctx_turn.get("new_language"):
+                        detected_lang = ctx_turn["new_language"]
+                        session.set_language(detected_lang, explicit=True)
+
+                    response_lang = ctx_turn.get("language") or detected_lang
+
                     if ctx_turn["handled_deterministically"]:
                         reply = ctx_turn["response_text"]
-                        speech_text = ctx_turn.get("speech_text") or format_text_for_speech(reply, lang=detected_lang)
+                        speech_text = ctx_turn.get("speech_text") or format_text_for_speech(reply, lang=response_lang)
                         if ctx_turn.get("map_action"):
                             await websocket.send_json({
                                 "type": "map_action",
                                 **ctx_turn["map_action"]
                             })
                     else:
-                        await websocket.send_json({"type": "status", "status": "thinking", "stage": "llm"})
+                        await websocket.send_json({"type": "status", "status": "thinking", "stage": "llm", "turn_id": current_turn})
                         try:
-                            reply = await llm_client.generate_response(session.history, language_code=detected_lang)
-                            speech_text = format_text_for_speech(reply, lang=detected_lang)
+                            reply = await llm_client.generate_response(session.history, language_code=response_lang)
+                            speech_text = format_text_for_speech(reply, lang=response_lang)
                         except Exception as e:
                             logger.error(f"LLM generation error: {e}")
                             reply = "I apologize, I encountered an issue retrieving the information. Please ask again."
                             speech_text = reply
 
-                # Check interruption after LLM
-                if session.is_interrupted or current_turn != session.current_turn_id:
-                    logger.info(f"Turn {current_turn} interrupted after LLM.")
+                # Check interruption after context/LLM
+                if not session.is_turn_valid(current_turn):
+                    logger.info(f"Turn {current_turn} interrupted after response generation.")
                     continue
+
+                # Check if approaching call duration limit (>= 155s of 180s)
+                elapsed_call_time = time.time() - call_start_time
+                if elapsed_call_time >= 155 and not warning_sent:
+                    warning_sent = True
+                    closing_suffixes = {
+                        "mr-IN": " (आपल्या कॉलची ३ मिनिटांची वेळ मर्यादा संपत आहे. सिटीलिंकचा वापर केल्याबद्दल धन्यवाद!)",
+                        "hi-IN": " (आपके कॉल की 3 मिनट की समय सीमा समाप्त हो रही है। सिटीलिंक का उपयोग करने के लिए धन्यवाद!)",
+                        "en-IN": " (Your 3-minute call limit is concluding. Thank you for calling CityLinc!)"
+                    }
+                    closing_suffix = closing_suffixes.get(response_lang, closing_suffixes["mr-IN"])
+                    reply += closing_suffix
+                    speech_text = format_text_for_speech(reply, lang=response_lang)
 
                 # Send Assistant transcript to UI
                 await websocket.send_json({
                     "type": "transcript",
                     "role": "assistant",
                     "text": reply,
-                    "language": detected_lang
+                    "turn_id": current_turn,
+                    "language": response_lang
                 })
 
                 # Step 3: Sarvam TTS Speech Synthesis
-                await websocket.send_json({"type": "status", "status": "thinking", "stage": "tts"})
+                await websocket.send_json({"type": "status", "status": "thinking", "stage": "tts", "turn_id": current_turn})
                 try:
+                    if not session.is_turn_valid(current_turn):
+                        logger.info(f"Turn {current_turn} canceled before TTS.")
+                        continue
+
                     tts_result = await tts_client.synthesize(
                         text=speech_text,
-                        language_code=detected_lang
+                        language_code=response_lang
                     )
                     audio_output = tts_result.get("audio_base64", "")
                     out_format = tts_result.get("format", "audio/mpeg")
@@ -397,14 +495,14 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                         out_format = "audio/mpeg"
 
                     # Check interruption before sending audio
-                    if session.is_interrupted or current_turn != session.current_turn_id:
+                    if not session.is_turn_valid(current_turn):
                         logger.info(f"Turn {current_turn} canceled before sending audio.")
                         continue
 
                     session.add_assistant_message(reply, current_turn)
 
                     # Send generated speech audio to client
-                    await websocket.send_json({"type": "status", "status": "speaking"})
+                    await websocket.send_json({"type": "status", "status": "speaking", "turn_id": current_turn})
                     await websocket.send_json({
                         "type": "audio",
                         "audio": audio_output,
@@ -438,18 +536,30 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                 if is_lang_switched:
                     logger.info(f"Text language switched: {session.current_language} -> {detected_lang}")
 
-                current_turn = session.add_user_message(text_input, language=detected_lang)
+                current_turn = session.start_user_turn()
+                if is_lang_switched:
+                    session.set_language(detected_lang)
+
+                session.add_user_message(text_input, language=detected_lang, turn_id=current_turn)
                 await websocket.send_json({
                     "type": "transcript",
                     "role": "user",
                     "text": text_input,
+                    "turn_id": current_turn,
                     "language": detected_lang,
                     "language_switched": is_lang_switched,
                     "previous_language": session.current_language
                 })
 
-                await websocket.send_json({"type": "status", "status": "thinking"})
-                ctx_turn = context_engine.process_turn(session.session_id, text_input, language=detected_lang)
+                if not session.is_turn_valid(current_turn):
+                    continue
+
+                await websocket.send_json({"type": "status", "status": "thinking", "turn_id": current_turn})
+                ctx_turn = context_engine.process_turn(session.session_id, text_input, language=detected_lang, turn_id=current_turn)
+                if ctx_turn.get("new_language"):
+                    detected_lang = ctx_turn["new_language"]
+                    session.set_language(detected_lang)
+
                 if ctx_turn["handled_deterministically"]:
                     reply = ctx_turn["response_text"]
                     speech_text = ctx_turn.get("speech_text") or format_text_for_speech(reply, lang=detected_lang)
@@ -462,24 +572,44 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                     reply = await llm_client.generate_response(session.history, language_code=detected_lang)
                     speech_text = format_text_for_speech(reply, lang=detected_lang)
 
-                if session.is_interrupted or current_turn != session.current_turn_id:
+                if not session.is_turn_valid(current_turn):
                     continue
+
+                # Check if approaching call duration limit (>= 155s of 180s)
+                elapsed_call_time = time.time() - call_start_time
+                if elapsed_call_time >= 155 and not warning_sent:
+                    warning_sent = True
+                    closing_suffixes = {
+                        "mr-IN": " (आपल्या कॉलची ३ मिनिटांची वेळ मर्यादा संपत आहे. सिटीलिंकचा वापर केल्याबद्दल धन्यवाद!)",
+                        "hi-IN": " (आपके कॉल की 3 मिनट की समय सीमा समाप्त हो रही है। सिटीलिंक का उपयोग करने के लिए धन्यवाद!)",
+                        "en-IN": " (Your 3-minute call limit is concluding. Thank you for calling CityLinc!)"
+                    }
+                    closing_suffix = closing_suffixes.get(detected_lang, closing_suffixes["mr-IN"])
+                    reply += closing_suffix
+                    speech_text = format_text_for_speech(reply, lang=detected_lang)
 
                 await websocket.send_json({
                     "type": "transcript",
                     "role": "assistant",
                     "text": reply,
+                    "turn_id": current_turn,
                     "language": detected_lang
                 })
 
+                if not session.is_turn_valid(current_turn):
+                    continue
+
                 tts_result = await tts_client.synthesize(text=speech_text, language_code=detected_lang)
+                if not session.is_turn_valid(current_turn):
+                    continue
+
                 session.add_assistant_message(reply, current_turn)
 
                 tts_format = tts_result.get("format", "audio/mpeg")
                 if tts_format == "audio/mp3":
                     tts_format = "audio/mpeg"
 
-                await websocket.send_json({"type": "status", "status": "speaking"})
+                await websocket.send_json({"type": "status", "status": "speaking", "turn_id": current_turn})
                 await websocket.send_json({
                     "type": "audio",
                     "audio": tts_result.get("audio_base64", ""),
@@ -493,7 +623,13 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
     except Exception as e:
         logger.error(f"WebSocket exception: {e}", exc_info=True)
     finally:
-        if caller_phone and call_registered:
+        try:
+            from backend.app.services.call_restriction_service import call_restriction_service
+            call_restriction_service.cancel_call_timeout(session.session_id)
+        except Exception:
+            pass
+
+        if call_registered:
             try:
                 from backend.app.services.call_restriction_service import call_restriction_service
                 call_restriction_service.register_call_disconnect(

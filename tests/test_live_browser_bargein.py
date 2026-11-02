@@ -12,6 +12,7 @@ import os
 import struct
 import subprocess
 import time
+import tempfile
 import urllib.request
 import wave
 import pytest
@@ -19,7 +20,7 @@ import websockets
 
 CHROME_PATH = r"C:\Program Files\Google\Chrome\Application\chrome.exe"
 CDP_PORT = 9336
-TEMP_PROFILE = r"C:\Users\wakad\AppData\Local\Temp\chrome_bargein_suite"
+TEMP_PROFILE = os.path.join(tempfile.gettempdir(), "chrome_bargein_suite")
 
 
 def generate_wav_base64(duration_sec: float = 6.0, sample_rate: int = 16000) -> str:

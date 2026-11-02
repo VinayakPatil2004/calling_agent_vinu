@@ -71,6 +71,7 @@ class CallRestrictionService:
         self.max_duration_sec = settings.MAX_CALL_DURATION_SECONDS
         self._active_timeouts: Dict[str, asyncio.Task] = {}
         self._timeout_callbacks: Dict[str, Callable[[str], Awaitable[None]]] = {}
+        self._warning_callbacks: Dict[str, Callable[[str], Awaitable[None]]] = {}
 
     def normalize_mobile(self, raw_phone: str):
         """Validates and normalizes phone number to E.164."""
@@ -172,7 +173,9 @@ class CallRestrictionService:
         raw_phone: Optional[str] = None,
         ist_date: Optional[str] = None,
         on_timeout_callback: Optional[Callable[[str], Awaitable[None]]] = None,
-        caller_phone: Optional[str] = None
+        caller_phone: Optional[str] = None,
+        on_warning_callback: Optional[Callable[[str], Awaitable[None]]] = None,
+        warning_lead_seconds: int = 20
     ) -> CallConnectResult:
         """
         Atomically registers an answered/connected call.
@@ -238,10 +241,14 @@ class CallRestrictionService:
                 f"[RateLimit] Call CONNECTED: id={provider_call_id} | caller={masked} | "
                 f"Today: {count}/{self.max_daily_calls} | Remaining: {remaining} | Status: {status_code}"
             )
-            # Schedule 180-second server-side duration enforcement
-            if on_timeout_callback:
-                self._timeout_callbacks[provider_call_id] = on_timeout_callback
-            self.schedule_call_timeout(provider_call_id, self.max_duration_sec)
+            # Schedule 180-second server-side duration enforcement with graceful pre-timeout notification
+            self.schedule_call_timeout(
+                provider_call_id,
+                timeout_seconds=self.max_duration_sec,
+                warning_lead_seconds=warning_lead_seconds,
+                on_warning_callback=on_warning_callback,
+                on_timeout_callback=on_timeout_callback
+            )
 
             return CallConnectResult(
                 allowed=True,
@@ -263,21 +270,43 @@ class CallRestrictionService:
                 message=DAILY_LIMIT_EXCEEDED_MESSAGE_MR if status_code == "daily_limit_exceeded" else "Service unavailable."
             )
 
-    def schedule_call_timeout(self, provider_call_id: str, timeout_seconds: int = 180) -> None:
+    def schedule_call_timeout(
+        self,
+        provider_call_id: str,
+        timeout_seconds: int = 180,
+        warning_lead_seconds: int = 20,
+        on_warning_callback: Optional[Callable[[str], Awaitable[None]]] = None,
+        on_timeout_callback: Optional[Callable[[str], Awaitable[None]]] = None
+    ) -> None:
         """
-        Schedules a background asynchronous timer to automatically terminate the call at 180 seconds.
+        Schedules a background asynchronous timer to automatically terminate the call at 180 seconds,
+        with a natural pre-timeout notification triggered before the hard limit.
         """
         self.cancel_call_timeout(provider_call_id)
+        if on_timeout_callback:
+            self._timeout_callbacks[provider_call_id] = on_timeout_callback
+        if on_warning_callback:
+            self._warning_callbacks[provider_call_id] = on_warning_callback
+
         try:
             loop = asyncio.get_running_loop()
-            task = loop.create_task(self._call_timeout_runner(provider_call_id, timeout_seconds))
+            task = loop.create_task(
+                self._call_timeout_runner(
+                    provider_call_id,
+                    timeout_seconds,
+                    warning_lead_seconds=warning_lead_seconds
+                )
+            )
             self._active_timeouts[provider_call_id] = task
-            logger.info(f"[CallDuration] Scheduled {timeout_seconds}s timeout for call {provider_call_id}")
+            logger.info(
+                f"[CallDuration] Scheduled {timeout_seconds}s timeout "
+                f"(graceful warning at {timeout_seconds - warning_lead_seconds}s) for call {provider_call_id}"
+            )
         except RuntimeError:
             logger.debug(f"[CallDuration] No active event loop to schedule timeout for {provider_call_id}")
 
     def cancel_call_timeout(self, provider_call_id: str) -> bool:
-        """Cancels a scheduled timeout task when the call disconnects normally."""
+        """Cancels a scheduled timeout task when the call disconnects normally or is rescheduled."""
         task = self._active_timeouts.pop(provider_call_id, None)
         if task and not task.done():
             task.cancel()
@@ -285,10 +314,33 @@ class CallRestrictionService:
             return True
         return False
 
-    async def _call_timeout_runner(self, provider_call_id: str, timeout_seconds: int) -> None:
-        """Background coroutine that sleeps for timeout duration and enforces termination."""
+    async def _call_timeout_runner(
+        self,
+        provider_call_id: str,
+        timeout_seconds: int,
+        warning_lead_seconds: int = 20
+    ) -> None:
+        """Background coroutine that dispatches warning notification before enforcing hard limit."""
         try:
-            await asyncio.sleep(timeout_seconds)
+            warning_delay = max(0, timeout_seconds - warning_lead_seconds)
+            if warning_delay > 0:
+                await asyncio.sleep(warning_delay)
+                # Dispatch graceful pre-timeout warning callback if registered
+                warn_cb = self._warning_callbacks.pop(provider_call_id, None)
+                if warn_cb:
+                    try:
+                        logger.info(
+                            f"[CallDuration] Pre-timeout graceful warning triggered for {provider_call_id} "
+                            f"({warning_lead_seconds}s before limit)"
+                        )
+                        await warn_cb(provider_call_id)
+                    except Exception as we:
+                        logger.debug(f"[CallDuration] Graceful warning callback exception for {provider_call_id}: {we}")
+                # Sleep remaining duration up to the strict 180s hard limit
+                await asyncio.sleep(warning_lead_seconds)
+            else:
+                await asyncio.sleep(timeout_seconds)
+
             logger.warning(
                 f"[CallDuration] Call {provider_call_id} reached maximum allowed duration of {timeout_seconds}s! "
                 f"Enforcing automatic termination."
@@ -301,6 +353,7 @@ class CallRestrictionService:
             logger.error(f"[CallDuration] Exception in timeout runner for {provider_call_id}: {e}", exc_info=True)
         finally:
             self._active_timeouts.pop(provider_call_id, None)
+            self._warning_callbacks.pop(provider_call_id, None)
 
     async def terminate_call_at_limit(self, provider_call_id: str) -> None:
         """
@@ -342,6 +395,7 @@ class CallRestrictionService:
         """
         self.cancel_call_timeout(provider_call_id)
         self._timeout_callbacks.pop(provider_call_id, None)
+        self._warning_callbacks.pop(provider_call_id, None)
 
         success, duration, status = self.storage.record_call_termination(
             provider_call_id,
