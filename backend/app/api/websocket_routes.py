@@ -9,6 +9,7 @@ import logging
 import time
 from typing import Optional, Tuple
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketState
 from backend.app.core.config import settings
 from backend.app.integrations.sarvam.stt import stt_client
 from backend.app.integrations.sarvam.tts import tts_client
@@ -84,10 +85,43 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
     call_registered = False
     call_start_time = time.time()
     warning_sent = False
+    is_ws_closed = False
+
+    async def safe_send_json(payload: dict) -> bool:
+        nonlocal is_ws_closed
+        if is_ws_closed:
+            return False
+        try:
+            if hasattr(websocket, "client_state") and websocket.client_state != WebSocketState.CONNECTED:
+                is_ws_closed = True
+                return False
+        except Exception:
+            pass
+        try:
+            await websocket.send_json(payload)
+            return True
+        except Exception as exc:
+            is_ws_closed = True
+            logger.debug(f"[WebSocket] safe_send_json aborted / closed: {exc}")
+            return False
+
+    async def safe_close(code: int = 1000, reason: str = ""):
+        nonlocal is_ws_closed
+        if is_ws_closed:
+            return
+        is_ws_closed = True
+        session.is_interrupted = True
+        try:
+            if hasattr(websocket, "client_state") and websocket.client_state == WebSocketState.CONNECTED:
+                await websocket.close(code=code, reason=reason)
+            elif not hasattr(websocket, "client_state"):
+                await websocket.close(code=code, reason=reason)
+        except Exception as ce:
+            logger.debug(f"[WebSocket] safe_close error (already closed): {ce}")
 
     async def _send_graceful_closing_warning(call_id: str):
         nonlocal warning_sent
-        if warning_sent or session.is_interrupted:
+        if warning_sent or session.is_interrupted or is_ws_closed:
             return
         warning_sent = True
         curr_lang = session.current_language
@@ -99,18 +133,20 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
         closing_text = closing_msgs.get(curr_lang, closing_msgs["mr-IN"])
         logger.info(f"[GracefulClosing] Sending 20s pre-timeout notification for session {call_id} in {curr_lang}")
         try:
-            await websocket.send_json({
+            sent = await safe_send_json({
                 "type": "call_warning",
                 "reason": "duration_approaching_limit",
                 "lead_seconds": 20,
                 "text": closing_text,
                 "language": curr_lang
             })
+            if not sent or is_ws_closed:
+                return
             tts_res = await tts_client.synthesize(text=closing_text, language_code=curr_lang)
             audio_b64 = tts_res.get("audio_base64")
-            if audio_b64:
-                await websocket.send_json({"type": "status", "status": "speaking"})
-                await websocket.send_json({
+            if audio_b64 and not is_ws_closed:
+                await safe_send_json({"type": "status", "status": "speaking"})
+                await safe_send_json({
                     "type": "audio",
                     "audio": audio_b64,
                     "format": tts_res.get("format", "audio/mpeg"),
@@ -121,6 +157,7 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
             logger.debug(f"[GracefulClosing] Error dispatching warning to websocket {call_id}: {ce}")
 
     async def _enforce_ws_timeout(call_id: str):
+        nonlocal is_ws_closed
         try:
             logger.info(f"Call duration limit ({settings.MAX_CALL_DURATION_SECONDS}s) reached for WebSocket session {call_id}")
             term_msgs = {
@@ -129,12 +166,12 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                 "en-IN": "Call maximum duration limit (3 minutes) reached."
             }
             term_msg = term_msgs.get(session.current_language, term_msgs["mr-IN"])
-            await websocket.send_json({
+            await safe_send_json({
                 "type": "call_terminated",
                 "reason": "max_duration_exceeded",
                 "message": term_msg
             })
-            await websocket.close(code=4008, reason="Max call duration exceeded")
+            await safe_close(code=4008, reason="Max call duration exceeded")
         except Exception as e:
             logger.debug(f"Error closing timed-out websocket {call_id}: {e}")
 
@@ -145,14 +182,14 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
         check = call_restriction_service.check_daily_call_limit(caller_phone)
         if not check.allowed:
             logger.warning(f"WebSocket caller {caller_phone} exceeded daily limit ({check.connected_count}/{settings.MAX_CONNECTED_CALLS_PER_DAY})")
-            await websocket.send_json({
+            await safe_send_json({
                 "type": "call_rejected",
                 "reason": "daily_limit_exceeded",
                 "message": DAILY_LIMIT_EXCEEDED_MESSAGE_MR,
                 "limit": settings.MAX_CONNECTED_CALLS_PER_DAY,
                 "current_count": check.connected_count
             })
-            await websocket.close(code=4003, reason="Daily call limit exceeded")
+            await safe_close(code=4003, reason="Daily call limit exceeded")
             return
 
     reg = await call_restriction_service.register_connected_call(
@@ -164,20 +201,20 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
     )
     if not reg.allowed:
         logger.warning(f"WebSocket caller {effective_phone} atomic register rejected ({reg.connected_count}/{settings.MAX_CONNECTED_CALLS_PER_DAY})")
-        await websocket.send_json({
+        await safe_send_json({
             "type": "call_rejected",
             "reason": "daily_limit_exceeded",
             "message": DAILY_LIMIT_EXCEEDED_MESSAGE_MR,
             "limit": settings.MAX_CONNECTED_CALLS_PER_DAY,
             "current_count": reg.connected_count
         })
-        await websocket.close(code=4003, reason="Daily call limit exceeded")
+        await safe_close(code=4003, reason="Daily call limit exceeded")
         return
 
     call_registered = True
 
     # Send initial welcome and status
-    await websocket.send_json({
+    await safe_send_json({
         "type": "ready",
         "session_id": session.session_id,
         "language": session.current_language,
@@ -187,18 +224,22 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
 
     try:
         while True:
+            if is_ws_closed:
+                break
             raw_data = await websocket.receive_text()
+            if is_ws_closed:
+                break
             try:
                 event = json.loads(raw_data)
             except json.JSONDecodeError:
-                await websocket.send_json({"type": "error", "message": "Invalid JSON payload"})
+                await safe_send_json({"type": "error", "message": "Invalid JSON payload"})
                 continue
 
             event_type = event.get("type", "")
 
             # 1. Ping / Keep-alive
             if event_type == "ping":
-                await websocket.send_json({"type": "pong"})
+                await safe_send_json({"type": "pong"})
                 continue
 
             # 2. Interruption / Barge-in
@@ -206,7 +247,7 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                 target_turn = event.get("turn_id")
                 turn_id = session.interrupt(turn_id=target_turn)
                 logger.info(f"Received user interruption for turn {target_turn}. Session advanced to: {turn_id}")
-                await websocket.send_json({
+                await safe_send_json({
                     "type": "interrupted",
                     "turn_id": turn_id,
                     "status": "listening"
@@ -217,7 +258,7 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
             if event_type == "reset":
                 session.reset()
                 context_engine.clear_context(session.session_id)
-                await websocket.send_json({
+                await safe_send_json({
                     "type": "status",
                     "status": "idle",
                     "message": "Conversation context reset."
@@ -232,6 +273,8 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
 
             # 4. Incoming Voice Audio payload (Phase 4.4 Stage 2)
             if event_type == "audio":
+                if is_ws_closed:
+                    continue
                 b64_audio = event.get("data", "")
                 raw_format = event.get("format", "audio/webm")
                 audio_format = raw_format.split(";")[0].strip().lower() if raw_format else "audio/webm"
@@ -240,15 +283,15 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
 
                 if not b64_audio or len(b64_audio.strip()) < 16:
                     logger.warning("[Audio Ingest] Discarding empty or missing audio payload.")
-                    await websocket.send_json({"type": "status", "status": "listening"})
+                    await safe_send_json({"type": "status", "status": "listening"})
                     continue
 
                 try:
                     audio_bytes = base64.b64decode(b64_audio)
                 except Exception as e:
                     logger.error(f"[Audio Ingest] Failed to decode base64 audio: {e}")
-                    await websocket.send_json({"type": "error", "message": "Corrupted audio data"})
-                    await websocket.send_json({"type": "status", "status": "listening"})
+                    await safe_send_json({"type": "error", "message": "Corrupted audio data"})
+                    await safe_send_json({"type": "status", "status": "listening"})
                     continue
 
                 # Scope D: Backend STT Payload Validation
@@ -259,8 +302,8 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                         f"Declared: {audio_format} | Duration: {duration_ms}ms"
                     )
                     if "unsupported_or_corrupt" in val_reason:
-                        await websocket.send_json({"type": "error", "message": "Unsupported or corrupted audio format."})
-                    await websocket.send_json({"type": "status", "status": "listening"})
+                        await safe_send_json({"type": "error", "message": "Unsupported or corrupted audio format."})
+                    await safe_send_json({"type": "status", "status": "listening"})
                     continue
 
                 logger.info(
@@ -272,7 +315,7 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                 current_turn = session.start_user_turn()
 
                 # Notify client: Transcribing speech
-                await websocket.send_json({
+                await safe_send_json({
                     "type": "status",
                     "status": "thinking",
                     "stage": "stt",
@@ -300,8 +343,8 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                         "hi-IN": "सेवा अस्थायी रूप से अनुपलब्ध है। कृपया थोड़ी देर बाद पुनः प्रयास करें।",
                         "en-IN": "Service temporarily unavailable. Please try again shortly."
                     }.get(session.current_language, "सेवा तात्पुरती अनुपलब्ध आहे. कृपया काही सेकंदांनंतर पुन्हा प्रयत्न करा.")
-                    await websocket.send_json({"type": "info", "message": service_err})
-                    await websocket.send_json({"type": "status", "status": "listening"})
+                    await safe_send_json({"type": "info", "message": service_err})
+                    await safe_send_json({"type": "status", "status": "listening"})
                     continue
 
                 stt_latency_ms = (time.perf_counter() - stt_start_time) * 1000
@@ -309,9 +352,9 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                 sarvam_acoustic_lang = stt_result.get("language_code", "unknown")
                 stt_error = stt_result.get("error")
 
-                # Verify turn validity before processing (reject stale turns overtaken during async STT)
-                if not session.is_turn_valid(current_turn):
-                    logger.info(f"Turn {current_turn} superseded or interrupted during STT. Discarding result.")
+                # Verify turn validity before processing (reject stale turns overtaken during async STT or closed ws)
+                if is_ws_closed or not session.is_turn_valid(current_turn):
+                    logger.info(f"Turn {current_turn} superseded or interrupted during STT (ws_closed={is_ws_closed}). Discarding result.")
                     continue
 
                 # Scope C: Empty STT Transcript & Error Handling
@@ -326,8 +369,8 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                             "hi-IN": "सेवा अस्थायी रूप से अनुपलब्ध है। कृपया थोड़ी देर बाद पुनः प्रयास करें।",
                             "en-IN": "Service temporarily unavailable. Please try again shortly."
                         }.get(curr_lang, "सेवा तात्पुरती अनुपलब्ध आहे. कृपया काही सेकंदांनंतर पुन्हा प्रयत्न करा.")
-                        await websocket.send_json({"type": "info", "message": api_err_msg})
-                        await websocket.send_json({"type": "status", "status": "listening"})
+                        await safe_send_json({"type": "info", "message": api_err_msg})
+                        await safe_send_json({"type": "status", "status": "listening"})
                         continue
 
                     # 2. Ambient noise burst returning empty transcript -> Silent discard!
@@ -337,7 +380,7 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                             f"[STT Empty Burst Discarded] Latency: {stt_latency_ms:.1f}ms | "
                             f"Duration: {approx_dur}ms | Bytes: {len(audio_bytes)} | Silent reset."
                         )
-                        await websocket.send_json({"type": "status", "status": "listening"})
+                        await safe_send_json({"type": "status", "status": "listening"})
                         continue
 
                     # 3. User spoke genuine duration but speech was unclear -> Controlled polite retry (max 2)
@@ -356,14 +399,14 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                             f"[STT Empty User Speech] Prompting user to repeat (attempt {session.consecutive_empty_count}/2) | "
                             f"Latency: {stt_latency_ms:.1f}ms | Duration: {approx_dur}ms"
                         )
-                        await websocket.send_json({"type": "info", "message": user_msg})
+                        await safe_send_json({"type": "info", "message": user_msg})
                     else:
                         logger.info(
                             f"[STT Empty Suppressed] Exceeded consecutive empty prompt threshold ({session.consecutive_empty_count}). "
                             f"Silent reset to avoid spam."
                         )
 
-                    await websocket.send_json({"type": "status", "status": "listening"})
+                    await safe_send_json({"type": "status", "status": "listening"})
                     continue
 
                 # Valid transcript received: reset consecutive empty counter
@@ -397,7 +440,7 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                         session.set_language(detected_lang, explicit=is_explicit_cmd)
 
                 # Send User transcript to UI
-                await websocket.send_json({
+                await safe_send_json({
                     "type": "transcript",
                     "role": "user",
                     "text": transcript,
@@ -410,9 +453,9 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                 # Register message in session
                 session.add_user_message(transcript, language=detected_lang, turn_id=current_turn)
 
-                # Check if user interrupted while we were processing
-                if not session.is_turn_valid(current_turn):
-                    logger.info(f"Turn {current_turn} canceled due to interruption.")
+                # Check if user interrupted while we were processing or ws closed
+                if is_ws_closed or not session.is_turn_valid(current_turn):
+                    logger.info(f"Turn {current_turn} canceled due to interruption or ws closure.")
                     continue
 
                 # Step 2: Deterministic Transit Engine & Context Resolution
@@ -425,7 +468,9 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                     reply = clarification
                     speech_text = clarification
                 else:
-                    await websocket.send_json({"type": "status", "status": "thinking", "stage": "context", "turn_id": current_turn})
+                    if is_ws_closed:
+                        continue
+                    await safe_send_json({"type": "status", "status": "thinking", "stage": "context", "turn_id": current_turn})
                     ctx_turn = context_engine.process_turn(session.session_id, transcript, language=detected_lang, turn_id=current_turn)
                     if ctx_turn.get("new_language"):
                         detected_lang = ctx_turn["new_language"]
@@ -437,12 +482,14 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                         reply = ctx_turn["response_text"]
                         speech_text = ctx_turn.get("speech_text") or format_text_for_speech(reply, lang=response_lang)
                         if ctx_turn.get("map_action"):
-                            await websocket.send_json({
+                            await safe_send_json({
                                 "type": "map_action",
                                 **ctx_turn["map_action"]
                             })
                     else:
-                        await websocket.send_json({"type": "status", "status": "thinking", "stage": "llm", "turn_id": current_turn})
+                        if is_ws_closed:
+                            continue
+                        await safe_send_json({"type": "status", "status": "thinking", "stage": "llm", "turn_id": current_turn})
                         try:
                             reply = await llm_client.generate_response(session.history, language_code=response_lang)
                             speech_text = format_text_for_speech(reply, lang=response_lang)
@@ -451,9 +498,9 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                             reply = "I apologize, I encountered an issue retrieving the information. Please ask again."
                             speech_text = reply
 
-                # Check interruption after context/LLM
-                if not session.is_turn_valid(current_turn):
-                    logger.info(f"Turn {current_turn} interrupted after response generation.")
+                # Check interruption after context/LLM or ws closed
+                if is_ws_closed or not session.is_turn_valid(current_turn):
+                    logger.info(f"Turn {current_turn} interrupted after response generation or ws closed.")
                     continue
 
                 # Check if approaching call duration limit (>= 155s of 180s)
@@ -470,7 +517,7 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                     speech_text = format_text_for_speech(reply, lang=response_lang)
 
                 # Send Assistant transcript to UI
-                await websocket.send_json({
+                await safe_send_json({
                     "type": "transcript",
                     "role": "assistant",
                     "text": reply,
@@ -479,10 +526,12 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                 })
 
                 # Step 3: Sarvam TTS Speech Synthesis
-                await websocket.send_json({"type": "status", "status": "thinking", "stage": "tts", "turn_id": current_turn})
+                if is_ws_closed:
+                    continue
+                await safe_send_json({"type": "status", "status": "thinking", "stage": "tts", "turn_id": current_turn})
                 try:
-                    if not session.is_turn_valid(current_turn):
-                        logger.info(f"Turn {current_turn} canceled before TTS.")
+                    if is_ws_closed or not session.is_turn_valid(current_turn):
+                        logger.info(f"Turn {current_turn} canceled before TTS (ws_closed={is_ws_closed}).")
                         continue
 
                     tts_result = await tts_client.synthesize(
@@ -495,15 +544,15 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                         out_format = "audio/mpeg"
 
                     # Check interruption before sending audio
-                    if not session.is_turn_valid(current_turn):
-                        logger.info(f"Turn {current_turn} canceled before sending audio.")
+                    if is_ws_closed or not session.is_turn_valid(current_turn):
+                        logger.info(f"Turn {current_turn} canceled before sending audio (ws_closed={is_ws_closed}).")
                         continue
 
                     session.add_assistant_message(reply, current_turn)
 
                     # Send generated speech audio to client
-                    await websocket.send_json({"type": "status", "status": "speaking", "turn_id": current_turn})
-                    await websocket.send_json({
+                    await safe_send_json({"type": "status", "status": "speaking", "turn_id": current_turn})
+                    await safe_send_json({
                         "type": "audio",
                         "audio": audio_output,
                         "format": out_format,
@@ -513,8 +562,8 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
 
                 except Exception as e:
                     logger.error(f"TTS synthesis error: {e}")
-                    await websocket.send_json({"type": "error", "message": f"TTS synthesis error: {str(e)}"})
-                    await websocket.send_json({"type": "status", "status": "idle"})
+                    await safe_send_json({"type": "error", "message": f"TTS synthesis error: {str(e)}"})
+                    await safe_send_json({"type": "status", "status": "idle"})
 
             # 5. Direct Text Input
             elif event_type == "text":
@@ -541,7 +590,7 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                     session.set_language(detected_lang)
 
                 session.add_user_message(text_input, language=detected_lang, turn_id=current_turn)
-                await websocket.send_json({
+                await safe_send_json({
                     "type": "transcript",
                     "role": "user",
                     "text": text_input,
@@ -551,10 +600,10 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                     "previous_language": session.current_language
                 })
 
-                if not session.is_turn_valid(current_turn):
+                if is_ws_closed or not session.is_turn_valid(current_turn):
                     continue
 
-                await websocket.send_json({"type": "status", "status": "thinking", "turn_id": current_turn})
+                await safe_send_json({"type": "status", "status": "thinking", "turn_id": current_turn})
                 ctx_turn = context_engine.process_turn(session.session_id, text_input, language=detected_lang, turn_id=current_turn)
                 if ctx_turn.get("new_language"):
                     detected_lang = ctx_turn["new_language"]
@@ -564,15 +613,17 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                     reply = ctx_turn["response_text"]
                     speech_text = ctx_turn.get("speech_text") or format_text_for_speech(reply, lang=detected_lang)
                     if ctx_turn.get("map_action"):
-                        await websocket.send_json({
+                        await safe_send_json({
                             "type": "map_action",
                             **ctx_turn["map_action"]
                         })
                 else:
+                    if is_ws_closed:
+                        continue
                     reply = await llm_client.generate_response(session.history, language_code=detected_lang)
                     speech_text = format_text_for_speech(reply, lang=detected_lang)
 
-                if not session.is_turn_valid(current_turn):
+                if is_ws_closed or not session.is_turn_valid(current_turn):
                     continue
 
                 # Check if approaching call duration limit (>= 155s of 180s)
@@ -588,7 +639,7 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                     reply += closing_suffix
                     speech_text = format_text_for_speech(reply, lang=detected_lang)
 
-                await websocket.send_json({
+                await safe_send_json({
                     "type": "transcript",
                     "role": "assistant",
                     "text": reply,
@@ -596,11 +647,11 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                     "language": detected_lang
                 })
 
-                if not session.is_turn_valid(current_turn):
+                if is_ws_closed or not session.is_turn_valid(current_turn):
                     continue
 
                 tts_result = await tts_client.synthesize(text=speech_text, language_code=detected_lang)
-                if not session.is_turn_valid(current_turn):
+                if is_ws_closed or not session.is_turn_valid(current_turn):
                     continue
 
                 session.add_assistant_message(reply, current_turn)
@@ -609,8 +660,8 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                 if tts_format == "audio/mp3":
                     tts_format = "audio/mpeg"
 
-                await websocket.send_json({"type": "status", "status": "speaking", "turn_id": current_turn})
-                await websocket.send_json({
+                await safe_send_json({"type": "status", "status": "speaking", "turn_id": current_turn})
+                await safe_send_json({
                     "type": "audio",
                     "audio": tts_result.get("audio_base64", ""),
                     "format": tts_format,
@@ -619,10 +670,13 @@ async def websocket_conversation_endpoint(websocket: WebSocket):
                 })
 
     except WebSocketDisconnect:
+        is_ws_closed = True
         logger.info(f"WebSocket client disconnected: {session.session_id}")
     except Exception as e:
+        is_ws_closed = True
         logger.error(f"WebSocket exception: {e}", exc_info=True)
     finally:
+        is_ws_closed = True
         try:
             from backend.app.services.call_restriction_service import call_restriction_service
             call_restriction_service.cancel_call_timeout(session.session_id)

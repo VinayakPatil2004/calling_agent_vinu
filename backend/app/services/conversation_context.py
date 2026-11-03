@@ -64,25 +64,30 @@ class IntentStr(str):
             "OTHER_POI_LOOKUP": {"other_poi_lookup", "poi_lookup"},
             "TIMETABLE_QUERY": {"timetable_query", "next_bus", "timetable"},
             "BUS_PASS_QUERY": {"bus_pass_query", "fare"},
+            "BUS_PASS_APPLICATION": {"bus_pass_application", "bus_pass_query"},
             "FARE_QUERY": {"fare_query", "fare"},
             "STOP_LOOKUP": {"stop_lookup", "route_confirmation", "stops"},
+            "NEARBY_STOP_LOOKUP": {"nearby_stop_lookup", "nearby_stop", "location_lookup"},
+            "EMERGENCY_ASSISTANCE": {"emergency_assistance", "emergency"},
             "route_confirmation": {"stop_lookup", "route_confirmation", "stops"},
             "CLARIFICATION": {"clarification", "general"},
             "number_pronunciation_preference": {"number_pronunciation_preference"}
         }
         for canon, aliases in mapping.items():
-            s_set = {canon, *aliases}
-            if str(self) in s_set and other in s_set:
+            s_set = {canon.lower(), *(a.lower() for a in aliases)}
+            if str(self).lower() in s_set and other.lower() in s_set:
                 return True
         return False
 
 
 # Explicit conversation termination phrases (using Unicode-safe word boundaries)
 TERMINATION_PATTERNS = [
-    r'^(?:no|nope|no\s*,?\s*thanks?|no\s*,?\s*thank\s*you|nothing\s*else|that\'?s\s*all|that\s*is\s*all)[\.!\s]*$',
+    r'^(?:no|nope|no\s*,?\s*thanks?|no\s*,?\s*thank\s*you|nothing\s*else|that\'?s\s*all(?:\s*,?\s*thank\s*(?:you|s))?|that\s*is\s*all(?:\s*,?\s*thank\s*(?:you|s))?)[\.!\s]*$',
     r'(?<![\wऀ-ॿ])(?:have\s+a\s+(?:nice|great|good)\s+day)(?![\wऀ-ॿ])',
-    r'(?<![\wऀ-ॿ])(?:goodbye|bye|bye\s*bye|see\s*you|exit|quit|stop)(?![\wऀ-ॿ])',
-    r'(?<![\wऀ-ॿ])(?:बाय|बाय\s*बाय|अलविदा|टाटा|थोड्या वेळाने बोलू)(?![\wऀ-ॿ])',
+    r'^(?:exit|quit)[\.!\s]*$',
+    r'(?<![\wऀ-ॿ])(?:goodbye|bye\s*bye|bye)(?![\wऀ-ॿ])',
+    r'(?:stop\s+(?:the\s+)?call|end\s+(?:the\s+)?call)',
+    r'(?<![\wऀ-ॿ])(?:गुडबाय|बाय|बाय\s*बाय|अलविदा|टाटा|थोड्या वेळाने बोलू)(?![\wऀ-ॿ])',
     r'^(?:नाही|नको|काही\s*नको|नाही\s*,?\s*धन्यवाद|काही\s*नको\s*,?\s*धन्यवाद|नाही\s*,?\s*आभार|नाही\s*काही\s*नको|शुभ\s*दिवस)[\.!\s]*$',
     r'^(?:नहीं|नहीं\s*,?\s*शुक्रिया|नहीं\s*,?\s*धन्यवाद|कुछ\s*नहीं\s*चाहिए|बस\s*इतना\s*ही\s*शुक्रिया|आपका\s*दिन\s*शुभ\s*हो|शुभ\s*दिन)[\.!\s]*$',
     r'मला\s*(?:आता|सध्या)?\s*(?:मदत|काही)?\s*नको',
@@ -92,7 +97,7 @@ TERMINATION_PATTERNS = [
     r'बस\s*इतना\s*ही',
     r'बस\s*(?:अब\s*)?बंद\s*(?:कर\s*देंगे|कर\s*दो|करो|कीजिए|करना\s*है)',
     r'(?:बंद\s*कर\s*देंगे|बंद\s*कर\s*दो|बंद\s*करो|कॉल\s*काट\s*दो|कॉल\s*रख\s*दो)',
-    r'(?:कॉल\s*बंद\s*करा|कॉल\s*कट\s*करा|फोन\s*ठेवा|थांबवा|बस\s*बंद\s*करा)'
+    r'(?:कॉल\s*बंद\s*करा|कॉल\s*कट\s*करा|फोन\s*ठेवा)'
 ]
 
 # Polite acknowledgement phrases (MUST NOT terminate session)
@@ -150,6 +155,28 @@ LANG_CHANGE_PATTERNS_EN = [
     r'(?:इंग्रजीत|इंग्लिशमध्ये|इंग्रजीमध्ये)\s*(?:बोल|बोला|सांगा)',
     r'\bplease\s+(?:talk|speak)\s+in\s+english\b',
     r'^(?:इंग्रजी|इंग्लिश|english)$'
+]
+
+# Emergency assistance patterns (dizziness, fainting, unconsciousness, medical distress)
+EMERGENCY_PATTERNS = [
+    r'(?:चक्कर\s*येत|चक्कर\s*आ\s*रहे|चक्कर\s*आना|चक्कर\s*आ\s*गई|चक्कर)',
+    r'(?:बेहोश\s*हो\s*रहा|बेहोश\s*हो\s*गया|बेहोश\s*है|बेहोशी|behoshi|unconscious|fainted|fainting)',
+    r'(?:बेशुद्ध\s*पडला|बेशुद्ध\s*झाला|बेशुद्ध\s*आहे|बेशुद्धावस्था|बेशुद्ध)',
+    r'(?:उलटी\s*होत|उलटी\s*हो\s*रही|vomiting)',
+    r'(?:छातीत\s*दुखत|छातीत\s*कळ|छाती\s*में\s*दर्द|chest\s*pain)',
+    r'(?:श्वास\s*घेण्यास\s*त्रास|सांस\s*लेने\s*में\s*तकलीफ|breathing\s*difficulty|shortness\s*of\s*breath)',
+    r'(?:हार्ट\s*अटॅक|heart\s*attack|medical\s*emergency|आपत्कालीन\s*वैद्यकीय)'
+]
+
+# Nearby bus stop patterns (proximity lookup for nearest bus stops)
+NEARBY_STOP_PATTERNS = [
+    r'(?:जवळचा|जवळचे|जवळची|जवळ)\s*(?:कोणता|कोणते)?\s*(?:बस\s*)?(?:थांबा|थांबे|स्टॉप|स्थानक)',
+    r'.+?\s*जवळ(?:चे|चा|ची)?\s*(?:बस\s*)?(?:थांबा|थांबे|स्टॉप|स्थानक)',
+    r'(?:मेरे\s+पास|पास\s+का|पास\s+के|पास\s+की|नजदीक(?:\s+वाला)?|सबसे\s+नजदीक)\s*(?:का\s+)?(?:सबसे\s+नजदीक\s+)?(?:कौन\s+सा)?\s*(?:बस\s*)?(?:स्टॉप|स्थानक|थांबा)',
+    r'.+?\s*(?:के\s+पास|नजदीक)\s*(?:कौन\s+सा|कहाँ)\s*(?:बस\s*)?(?:स्टॉप|स्थानक|थांबा)',
+    r'najdik\s+(?:wala\s+)?bus\s+stop',
+    r'(?:nearest|closest|nearby)\s+(?:bus\s+)?(?:stop|station)',
+    r'(?:bus\s+)?(?:stop|station)\s+(?:near\s+me|nearby)'
 ]
 
 
@@ -266,6 +293,17 @@ class ContextEngine:
     def check_termination(self, text: str) -> bool:
         """Checks if user explicitly requested to end the conversation."""
         norm = text.lower().strip()
+        # Immune transit stop / location queries from false goodbye triggers
+        transit_tokens = {"bus", "stop", "थांबा", "थांबे", "स्थानक", "स्टॉप", "station", "जवळ", "पास", "नजदीक", "najdik"}
+        query_words = set(re.findall(r'[a-zA-Z0-9ऀ-ॿ]+', norm))
+        if query_words & transit_tokens:
+            # If query contains transit words, only terminate on explicit farewell/end-call phrases
+            explicit_end_phrases = [
+                "goodbye", "bye bye", "अलविदा", "कॉल बंद करा", "कॉल कट करा", "फोन ठेवा",
+                "कॉल काट दो", "कॉल कट करो", "फोन काटो", "फोन रखो", "कॉल बंद", "कॉल कट"
+            ]
+            if not any(ep in norm for ep in explicit_end_phrases):
+                return False
         return any(re.search(pat, norm, re.IGNORECASE) for pat in TERMINATION_PATTERNS)
 
     def check_polite_thanks(self, text: str) -> bool:
@@ -317,6 +355,10 @@ class ContextEngine:
         if self.check_repeat(norm):
             return IntentStr("REPEAT_QUERY")
 
+        # 2C. EMERGENCY_ASSISTANCE (Dizziness, Fainting, Urgent Medical Distress)
+        if any(re.search(pat, norm, re.IGNORECASE) for pat in EMERGENCY_PATTERNS):
+            return IntentStr("EMERGENCY_ASSISTANCE")
+
         # 3. LANGUAGE_CHANGE (Explicit language preference override)
         if any(re.search(p, norm, re.IGNORECASE) for p in LANG_CHANGE_PATTERNS_HI + LANG_CHANGE_PATTERNS_MR + LANG_CHANGE_PATTERNS_EN):
             return IntentStr("LANGUAGE_CHANGE")
@@ -349,13 +391,37 @@ class ContextEngine:
         ]
         is_hosp_term = any(w in norm for w in hosp_keywords)
 
-        # 6. BUS_PASS_QUERY (Strict Pass Disambiguation vs Proximity "के पास / पास वाला")
-        is_pass_phrase = any(w in norm for w in [
-            "bus pass", "student pass", "monthly pass", "daily pass", "pass rate", "pass price", "pass cost",
-            "बस पास", "विद्यार्थी पास", "मासिक पास", "दैनिक पास", "पास दर", "पासचे दर", "पास दरें", "पास की दरें",
-            "पास बद्दल", "पास पाहिजे", "पास हवा", "पास मिळेल का", "पास कसा काढायचा", "पास कैसे", "पास चाहिए", "पास बनेगा"
+        # 5B. NEARBY_STOP_LOOKUP (Checked before bus pass to prevent proximity "के पास / मेरे पास" collisions)
+        if any(re.search(pat, norm, re.IGNORECASE) for pat in NEARBY_STOP_PATTERNS) and not is_hosp_term:
+            return IntentStr("NEARBY_STOP_LOOKUP")
+
+        # 6. BUS_PASS_QUERY & BUS_PASS_APPLICATION (Strict Pass Disambiguation vs Proximity "के पास / पास वाला / मेरे पास")
+        is_pass_application = any(w in norm for w in [
+            "पास कहाँ बनता", "पास कहाँ मिलता", "पास कैसे बनवाएं", "पास बनवाना", "पास निकालना",
+            "पास कुठे मिळतो", "पास कसा काढायचा", "पास कसा मिळवायचा", "पास कसा काढू", "पास केंद्र", "पास काउंटर",
+            "where can i get a bus pass", "how to get a bus pass", "where to get bus pass", "bus pass counter"
         ])
-        is_proximity_pass = bool(re.search(r'(?:के\s+पास|पास\s+(?:वाला|वाली|वाले|में)(?:\s|$)|(?:आस|जवळ)\s*पास)', norm))
+        if is_pass_application and not is_hosp_term:
+            return IntentStr("BUS_PASS_APPLICATION")
+
+        is_explicit_pass = any(w in norm for w in [
+            "बस पास", "bus pass", "विद्यार्थी पास", "student pass", "मासिक पास", "monthly pass",
+            "दैनिक पास", "daily pass"
+        ])
+        if is_explicit_pass and not is_hosp_term:
+            return IntentStr("BUS_PASS_QUERY")
+
+        is_pass_phrase = any(w in norm for w in [
+            "pass rate", "pass price", "pass cost", "पास दर", "पासचे दर", "पास दरें", "पास की दरें",
+            "पास बद्दल", "पास पाहिजे", "पास हवा", "पास मिळेल का", "पास कैसे", "पास चाहिए", "पास बनेगा", "पास माहिती"
+        ])
+        if (is_explicit_pass or is_pass_phrase) and not is_hosp_term:
+            return IntentStr("BUS_PASS_QUERY")
+
+        is_proximity_pass = bool(re.search(
+            r'(?:मेरे|माझ्या|आमच्या|तुमच्या|आपल्या)\s*(?:जवळ|पास)|(?:के\s+पास|पास\s+(?:का|के|की|में|वाला|वाली|वाले)|(?:आस|जवळ)\s*पास|नजदीक|najdik|जवळचे|जवळचा|जवळची|जवळ|near\s+me|nearest|closest|nearby)',
+            norm
+        ))
         t_no_from = re.sub(r'पा(?:सू|सु)न[ा-्]*', '', norm)
         tokens = set(re.findall(r'[a-zA-Z0-9ऀ-ॿ]+', t_no_from))
 
@@ -363,16 +429,16 @@ class ContextEngine:
         if not is_proximity_pass and not is_hosp_term:
             if "पास" in tokens or "pass" in tokens:
                 pass_context = any(w in norm for w in [
-                    "बस", "bus", "विद्यार्थी", "student", "मासिक", "monthly", "दैनिक", "daily",
+                    "विद्यार्थी", "student", "मासिक", "monthly", "दैनिक", "daily",
                     "दर", "दरें", "किराया", "rate", "cost", "price", "काढायचा", "मिळेल", "हवा",
                     "पाहिजे", "कसा", "चाहिए", "मिलेगा", "बनवाना", "बनता", "नूतनीकरण", "renewal",
                     "कार्ड", "card", "concession", "सवलत", "सूट", "काउंटर", "counter", "केंद्र", "center",
-                    "माहिती", "बद्दल", "बद्दल माहिती", "नियम", "फॉर्म", "form"
+                    "माहिती", "बद्दल माहिती", "नियम", "फॉर्म", "form"
                 ])
                 if pass_context or norm in ["पास", "pass", "बस पास", "bus pass"]:
                     has_pass_token = True
 
-        if (is_pass_phrase or has_pass_token) and not is_hosp_term and not is_proximity_pass:
+        if has_pass_token and not is_hosp_term and not is_proximity_pass:
             return IntentStr("BUS_PASS_QUERY")
 
         # 7. FARE_QUERY (standalone fare / ticket query)
@@ -732,6 +798,7 @@ class ContextEngine:
         intent = self.detect_intent(user_text, ctx)
         ctx.last_intent = str(intent)
         lang = ctx.language
+        norm = user_text.lower().strip()
 
         # -------------------------------------------------------------
         # 1. GOODBYE Intent (Safe Closing - Defect 4 Fix)
@@ -773,6 +840,19 @@ class ContextEngine:
                     "en-IN": "Sorry, there is no previous response to repeat."
                 }.get(lang, "Sorry, no previous response to repeat.")
             return self._response(msg, "REPEAT_QUERY", lang=lang)
+
+        # -------------------------------------------------------------
+        # 2C. EMERGENCY_ASSISTANCE Intent (Dizziness, Fainting, Medical Distress)
+        # -------------------------------------------------------------
+        if intent == "EMERGENCY_ASSISTANCE":
+            msg = {
+                "mr-IN": "तातडीने बस चालक किंवा वाहकाला (कंडक्टर) सांगा आणि गरज असल्यास बस सुरक्षितपणे थांबवण्यास सांगा. प्रवासी बेशुद्ध असल्यास त्यांना अन्न, पाणी किंवा औषध देऊ नका. लक्षणे गंभीर असल्यास किंवा श्वास घेण्यास त्रास होत असल्यास त्वरित ११२ या आपत्कालीन क्रमांकावर कॉल करा.",
+                "hi-IN": "तुरंत बस चालक या कंडक्टर को सूचित करें और आवश्यकता होने पर बस को सुरक्षित रूप से रोकने के लिए कहें। यदि यात्री बेहोश है, तो उसे कुछ भी खाने-पीने या दवाई न दें। यदि स्थिति गंभीर है या सांस लेने में तकलीफ है, तो तुरंत 112 पर कॉल करें।",
+                "en-IN": "Immediately alert the bus driver or conductor and ask them to stop safely if urgent help is needed. If the passenger is unconscious, do not give them any food, drink, or medicine. If symptoms are severe or there is difficulty breathing, call emergency number 112 immediately."
+            }.get(lang, "Alert the bus driver or conductor immediately. Call emergency number 112 if urgent.")
+            res = self._response(msg, "EMERGENCY_ASSISTANCE", lang=lang)
+            ctx.last_response_text = msg
+            return res
 
         # -------------------------------------------------------------
         # 3. LANGUAGE_CHANGE Intent (Phase 4.8 Section 2 P0)
@@ -1057,6 +1137,49 @@ class ContextEngine:
             return self._response(prompt_msg, "HOSPITAL_LOOKUP", lang=lang)
 
         # -------------------------------------------------------------
+        # 7B. NEARBY_STOP_LOOKUP Intent
+        # -------------------------------------------------------------
+        if intent == "NEARBY_STOP_LOOKUP":
+            matched_loc = None
+            for canonical, aliases in LOCATION_ALIASES.items():
+                if canonical in ('station', 'civil'):
+                    continue
+                for a in aliases:
+                    if a in ('station', 'कॉल'):
+                        continue
+                    if len(a) >= 3 and a in norm:
+                        matched_loc = canonical
+                        break
+                if matched_loc:
+                    break
+
+            if matched_loc:
+                rp = route_engine.resolve_place(matched_loc)
+                clean_stops = []
+                for s in rp.sample_stops:
+                    cs = re.sub(r'\s*\([UD0-9\s]+\)', '', s).strip()
+                    if cs and cs not in clean_stops:
+                        clean_stops.append(cs)
+                stops_str = ", ".join(clean_stops[:3]) if clean_stops else rp.display_name
+                msg = {
+                    "mr-IN": f"{rp.display_name} परिसरातील प्रमुख बस थांबे: {stops_str} आहेत.",
+                    "hi-IN": f"{rp.display_name} क्षेत्र के मुख्य बस स्टॉप: {stops_str} हैं।",
+                    "en-IN": f"Main bus stops in the {rp.display_name} area are: {stops_str}."
+                }.get(lang, f"Bus stops near {rp.display_name}: {stops_str}.")
+                res = self._response(msg, "STOP_LOOKUP", lang=lang)
+                ctx.last_response_text = msg
+                return res
+            else:
+                msg = {
+                    "mr-IN": "तुमचा जवळचा थांबा सांगण्यासाठी, कृपया तुमचे सध्याचे ठिकाण किंवा जवळचा परिसर सांगा (उदा. सीबीएस, पंचवटी, नाशिक रोड, किंवा सातपूर).",
+                    "hi-IN": "आपके पास का बस स्टॉप बताने के लिए, कृपया अपना वर्तमान क्षेत्र या नजदीकी लैंडमार्क बताइए (जैसे सीबीएस, पंचवटी, नासिक रोड, या सातपुर)।",
+                    "en-IN": "To find your nearest bus stop, please tell me your current area or landmark (for example, CBS, Panchavati, Nashik Road, or Satpur)."
+                }.get(lang, "Please provide your current area or nearby landmark to find the nearest bus stop.")
+                res = self._response(msg, "STOP_LOOKUP", lang=lang)
+                ctx.last_response_text = msg
+                return res
+
+        # -------------------------------------------------------------
         # 8. STOP_LOOKUP Intent
         # -------------------------------------------------------------
         if intent == "STOP_LOOKUP":
@@ -1132,10 +1255,31 @@ class ContextEngine:
             return self._response(ask_msg, "TIMETABLE_QUERY", lang=lang)
 
         # -------------------------------------------------------------
-        # 10. BUS_PASS_QUERY & FARE_QUERY (With Mandatory Safety Notice - Defect 5 Fix)
+        # 10. BUS_PASS_QUERY & FARE_QUERY & BUS_PASS_APPLICATION
         # -------------------------------------------------------------
-        if intent in ("BUS_PASS_QUERY", "FARE_QUERY"):
+        if intent in ("BUS_PASS_QUERY", "BUS_PASS_APPLICATION", "FARE_QUERY"):
             norm = user_text.lower()
+            is_pass_app = (
+                str(intent) == "BUS_PASS_APPLICATION" or
+                any(w in norm for w in [
+                    "पास कहाँ बनता", "पास कहाँ मिलता", "पास कैसे बनवाएं", "पास बनवाना", "पास निकालना",
+                    "पास कुठे मिळतो", "पास कसा काढायचा", "पास कसा मिळवायचा", "पास कसा काढू", "पास केंद्र", "पास काउंटर",
+                    "where can i get a bus pass", "how to get a bus pass", "where to get bus pass", "bus pass counter"
+                ])
+            )
+            is_fare_inquiry = any(w in norm for w in [
+                "किराया", "दर", "दरें", "rate", "cost", "price", "kitna", "कितना", "किती", "सवलत", "discount"
+            ])
+            if is_pass_app and not is_fare_inquiry:
+                msg = {
+                    "mr-IN": "सिटीलिंक बस पास काढण्यासाठीचे अधिकृत काउंटर, पत्ते आणि वेळा यांची अधिकृत माहिती सध्या उपलब्ध नाही. कृपया अधिक माहितीसाठी मुख्य बस स्थानक (उदा. सीबीएस किंवा निमाणी) चौकशी कक्षाशी संपर्क साधा.",
+                    "hi-IN": "सिटीलिंक बस पास बनाने वाले काउंटर, उनके पते और खुलने के समय की आधिकारिक जानकारी वर्तमान में उपलब्ध नहीं है। कृपया अधिक जानकारी के लिए मुख्य बस स्टैंड (जैसे सीबीएस या निमाणी) पूछताछ केंद्र से संपर्क करें।",
+                    "en-IN": "Official information regarding bus pass counter locations, addresses, and operating hours is currently unavailable. Please inquire at the main bus stand (such as CBS or Nimani) information counter for pass details."
+                }.get(lang, "Official bus pass counter details are currently unavailable.")
+                res = self._response(msg, intent, lang=lang)
+                ctx.last_response_text = msg
+                return res
+
             if any(w in norm for w in ["student", "विद्यार्थी", "छात्र"]):
                 msg = {
                     "mr-IN": "सिटीलिंक विद्यार्थी पास (Student Pass): ३० दिवसांच्या मासिक पासवर ५०% सवलत आहे, आणि ९० दिवसांच्या त्रैमासिक पासवर ६६.६०% सवलत मिळते. (टीप: हे दर १ जानेवारी २०२३ च्या अधिकृत टप्प्यांवर आधारित असून सध्याचे अधिकृत दर पडताळणी प्रलंबित आहेत).",
@@ -1146,7 +1290,7 @@ class ContextEngine:
                 ctx.last_response_text = msg
                 return res
 
-            if intent == "BUS_PASS_QUERY" or any(w in norm for w in ["पास", "pass"]):
+            if intent == "BUS_PASS_QUERY":
                 msg = {
                     "mr-IN": "सिटीलिंक बस पास दर: १ दिवसाचा ओपन पास ₹११०, ७ दिवस ₹५३०, ३० दिवसांचा मासिक पास ₹२,१००, त्रैमासिक पास (९० दिवस) ₹५,२५०, आणि अर्धवार्षिक पास (१८० दिवस) ₹९,४५०. (टीप: हे दर १ जानेवारी २०२३ च्या अधिकृत टप्प्यांवर आधारित अंदाजित असून सध्याचे दर पडताळणी प्रलंबित आहेत).",
                     "hi-IN": "सिटीलिंक बस पास दर: 1 दिन का पास ₹110, 7 दिन ₹530, 30 दिन का मासिक पास ₹2,100, 90 दिन ₹5,250, और 180 दिन ₹9,450 है। (नोट: ये दरें 1 जनवरी 2023 की तालिका पर आधारित हैं और वर्तमान दर सत्यापन लंबित है।)",

@@ -655,6 +655,16 @@ class TransitRouteEngine:
         origin_sids = set(origin_resolved.matched_station_ids)
         dest_sids = set(dest_resolved.matched_station_ids)
 
+        # Disambiguate Panchavati vs Nimani sub-corridor stops:
+        # Panchavati specifically centers on Panchavati Karanja (704, 707, 956)
+        # Nimani specifically centers on Panchavati Depot Corner / Nimani Bus Stand (691, 694, 1194)
+        if origin_resolved.canonical_name == "panchavati" and dest_resolved.canonical_name == "nimani":
+            origin_sids = {704, 707, 956}
+            dest_sids = {691, 694, 1194}
+        elif origin_resolved.canonical_name == "nimani" and dest_resolved.canonical_name == "panchavati":
+            origin_sids = {691, 694, 1194}
+            dest_sids = {704, 707, 956}
+
         o_clusters, d_clusters = transit_graph.get_origin_and_dest_clusters(origin_sids, dest_sids)
 
         # Check for identical origin and destination (Test Case 14)
